@@ -1,0 +1,53 @@
+name: Conventional Commits
+
+on:
+  pull_request:
+    types:
+      - edited
+      - opened
+      - reopened
+      - synchronize
+
+jobs:
+  title:
+    name: Conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: .commitlintrc.yml
+
+  labels:
+    name: Assign labels
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: mauroalderete/action-assign-labels@v1
+        with:
+          pull-request-number: ${{ github.event.pull_request.number }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          conventional-commits: |
+            conventional-commits:
+              - type: 'fix'
+                nouns: ['FIX', 'Fix', 'fix']
+                labels: ['bug']
+              - type: 'feature'
+                nouns: ['FEAT', 'Feat', 'feat']
+                labels: ['feature']
+              - type: 'chore'
+                nouns: ['CHORE', 'Chore', 'chore']
+                labels: ['chore']
+              - type: 'docs'
+                nouns: ['DOCS', 'Docs', 'docs']
+                labels: ['documentation']
+              - type: 'ci'
+                nouns: ['CI', 'Ci', 'ci']
+                labels: ['ci']
