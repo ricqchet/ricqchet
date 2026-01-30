@@ -7,20 +7,32 @@ defmodule Relay.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      RelayWeb.Telemetry,
-      Relay.Repo,
-      {DNSCluster, query: Application.get_env(:relay, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: Relay.PubSub},
-      {Oban, Application.fetch_env!(:relay, Oban)},
-      # Start to serve requests, typically the last entry
-      RelayWeb.Endpoint
-    ]
+    children =
+      [
+        RelayWeb.Telemetry,
+        Relay.Repo,
+        {DNSCluster, query: Application.get_env(:relay, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: Relay.PubSub},
+        {Oban, Application.fetch_env!(:relay, Oban)}
+      ] ++
+        dispatcher_child() ++
+        [
+          # Start to serve requests, typically the last entry
+          RelayWeb.Endpoint
+        ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Relay.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp dispatcher_child do
+    if Application.get_env(:relay, :dispatcher_enabled, true) do
+      [Relay.Dispatcher]
+    else
+      []
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration

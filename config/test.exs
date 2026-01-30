@@ -23,6 +23,9 @@ config :relay, RelayWeb.Endpoint,
 # Configure Oban for testing
 config :relay, Oban, testing: :inline
 
+# Disable dispatcher in tests (we'll manually trigger delivery)
+config :relay, dispatcher_enabled: false
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 
