@@ -21,6 +21,8 @@ defmodule RelayWeb.Router do
     pipe_through [:api, :authenticated]
 
     post "/publish/*destination_url", PublishController, :create
+    get "/messages/:id", MessageController, :show
+    delete "/messages/:id", MessageController, :delete
   end
 
   # Enable LiveDashboard in development
