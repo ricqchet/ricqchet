@@ -37,9 +37,7 @@ defmodule Relay.Delivery.HttpClient do
       {"x-relay-attempt", to_string(message.attempts + 1)}
     ]
 
-    forwarded_headers =
-      (message.headers || %{})
-      |> Enum.map(fn {key, value} -> {key, value} end)
+    forwarded_headers = Map.to_list(message.headers || %{})
 
     base_headers ++ forwarded_headers
   end

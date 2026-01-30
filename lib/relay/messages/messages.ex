@@ -125,28 +125,22 @@ defmodule Relay.Messages do
     attempts = message.attempts + 1
     now = DateTime.utc_now()
 
-    changes = %{
+    base_changes = %{
       attempts: attempts,
       last_error: format_error(error),
       last_response_status: response && response[:status],
       last_response_body: response && truncate_body(response[:body])
     }
 
-    changes =
+    status_changes =
       if attempts >= message.max_retries do
-        Map.merge(changes, %{
-          status: "failed",
-          completed_at: now
-        })
+        %{status: "failed", completed_at: now}
       else
-        Map.merge(changes, %{
-          status: "pending",
-          scheduled_at: DateTime.add(now, backoff_seconds(attempts), :second)
-        })
+        %{status: "pending", scheduled_at: DateTime.add(now, backoff_seconds(attempts), :second)}
       end
 
     message
-    |> Message.changeset(changes)
+    |> Message.changeset(Map.merge(base_changes, status_changes))
     |> Repo.update()
   end
 
@@ -182,5 +176,10 @@ defmodule Relay.Messages do
 
   defp truncate_body(nil), do: nil
   defp truncate_body(body) when is_binary(body), do: String.slice(body, 0, 10_000)
-  defp truncate_body(body), do: body |> inspect() |> String.slice(0, 10_000)
+
+  defp truncate_body(body) do
+    body
+    |> inspect()
+    |> String.slice(0, 10_000)
+  end
 end

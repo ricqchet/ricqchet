@@ -18,10 +18,10 @@ defmodule RelayWeb.Plugs.Authenticate do
 
   @behaviour Plug
 
-  @impl true
+  @impl Plug
   def init(opts), do: opts
 
-  @impl true
+  @impl Plug
   def call(conn, _opts) do
     with {:ok, api_key} <- extract_api_key(conn),
          %{} = tenant <- Tenants.get_by_api_key(api_key) do
