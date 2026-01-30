@@ -57,7 +57,8 @@ defmodule Relay.Tenants.Tenant do
   end
 
   defp generate_api_key do
-    :crypto.strong_rand_bytes(32)
+    32
+    |> :crypto.strong_rand_bytes()
     |> Base.url_encode64(padding: false)
   end
 end

@@ -29,12 +29,15 @@ defmodule RelayWeb.MessageController do
   def delete(conn, %{"id" => id}) do
     tenant = conn.assigns.current_tenant
 
-    with message when not is_nil(message) <- Messages.get_by_tenant(tenant, id),
-         {:ok, _message} <- Messages.cancel(message) do
-      render(conn, :cancelled)
-    else
-      nil -> {:error, :not_found}
-      {:error, :already_dispatched} -> {:error, :already_dispatched}
+    case Messages.get_by_tenant(tenant, id) do
+      nil ->
+        {:error, :not_found}
+
+      message ->
+        case Messages.cancel(message) do
+          {:ok, _message} -> render(conn, :cancelled)
+          {:error, :already_dispatched} -> {:error, :already_dispatched}
+        end
     end
   end
 end

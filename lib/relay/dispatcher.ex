@@ -24,13 +24,13 @@ defmodule Relay.Dispatcher do
 
   # Server callbacks
 
-  @impl true
+  @impl GenServer
   def init(_opts) do
     schedule_poll()
     {:ok, %{}}
   end
 
-  @impl true
+  @impl GenServer
   def handle_info(:poll, state) do
     dispatch_pending()
     schedule_poll()
@@ -56,10 +56,9 @@ defmodule Relay.Dispatcher do
   end
 
   defp enqueue_delivery(message) do
-    %{message_id: message.id}
-    |> Worker.new()
-    |> Oban.insert()
-    |> case do
+    job = Worker.new(%{message_id: message.id})
+
+    case Oban.insert(job) do
       {:ok, _job} ->
         Logger.debug("Enqueued delivery for message #{message.id}")
 

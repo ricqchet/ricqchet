@@ -132,7 +132,7 @@ defmodule RelayWeb.PublishController do
   defp check_dedup(_, _), do: :ok
 
   # Parse delay string like "30s", "5m", "2h", "1d" to seconds
-  defp parse_delay(delay) when is_binary(delay) do
+  defp parse_delay(delay) do
     case Integer.parse(delay) do
       {value, "s"} -> value
       {value, "m"} -> value * 60
@@ -143,14 +143,10 @@ defmodule RelayWeb.PublishController do
     end
   end
 
-  defp parse_delay(_), do: 0
-
-  defp parse_integer(value, default) when is_binary(value) do
+  defp parse_integer(value, default) do
     case Integer.parse(value) do
       {int, _} -> int
       :error -> default
     end
   end
-
-  defp parse_integer(_, default), do: default
 end
