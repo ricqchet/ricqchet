@@ -17,9 +17,10 @@ defmodule RelayWeb.Router do
   end
 
   # API v1 endpoints (auth required)
-  # Routes will be added as controllers are implemented
   scope "/v1", RelayWeb do
     pipe_through [:api, :authenticated]
+
+    post "/publish/*destination_url", PublishController, :create
   end
 
   # Enable LiveDashboard in development
