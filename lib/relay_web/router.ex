@@ -5,11 +5,24 @@ defmodule RelayWeb.Router do
     plug :accepts, ["json"]
   end
 
-  scope "/api", RelayWeb do
-    pipe_through :api
+  pipeline :authenticated do
+    plug RelayWeb.Plugs.Authenticate
   end
 
-  # Enable LiveDashboard and Swoosh mailbox preview in development
+  # Health check endpoint (no auth required)
+  scope "/", RelayWeb do
+    pipe_through :api
+
+    get "/health", HealthController, :index
+  end
+
+  # API v1 endpoints (auth required)
+  # Routes will be added as controllers are implemented
+  scope "/v1", RelayWeb do
+    pipe_through [:api, :authenticated]
+  end
+
+  # Enable LiveDashboard in development
   if Application.compile_env(:relay, :dev_routes) do
     # If you want to use the LiveDashboard in production, you should put
     # it behind authentication and allow only admins to access it.

@@ -1,21 +1,27 @@
 defmodule RelayWeb.ErrorJSON do
   @moduledoc """
-  This module is invoked by your endpoint in case of errors on JSON requests.
-
-  See config/config.exs.
+  JSON error responses for the API.
   """
 
-  # If you want to customize a particular status code,
-  # you may add your own clauses, such as:
-  #
-  # def render("500.json", _assigns) do
-  #   %{errors: %{detail: "Internal Server Error"}}
-  # end
+  @doc """
+  Renders error responses in JSON format.
 
-  # By default, Phoenix returns the status message from
-  # the template name. For example, "404.json" becomes
-  # "Not Found".
+  Supports custom errors with error code and message, as well as
+  standard HTTP error codes like 404 and 500.
+  """
+  def render("error.json", %{error: error, message: message}) do
+    %{error: error, message: message}
+  end
+
+  def render("404.json", _assigns) do
+    %{error: "not_found", message: "Resource not found"}
+  end
+
+  def render("500.json", _assigns) do
+    %{error: "internal_error", message: "Internal server error"}
+  end
+
   def render(template, _assigns) do
-    %{errors: %{detail: Phoenix.Controller.status_message_from_template(template)}}
+    %{error: "error", message: Phoenix.Controller.status_message_from_template(template)}
   end
 end
