@@ -181,8 +181,11 @@ defmodule RelayWeb.PublishController do
       |> Enum.map(fn {key, value} ->
         # Strip "relay-forward-" prefix
         header_name = String.replace_prefix(key, "relay-forward-", "")
-        {header_name, value}
+        # Sanitize header values to prevent header injection
+        sanitized_value = sanitize_header_value(value)
+        {header_name, sanitized_value}
       end)
+      |> Enum.reject(fn {name, _} -> blocked_header?(name) end)
       |> Map.new()
 
     if map_size(forwarded) > 0 do
@@ -191,6 +194,29 @@ defmodule RelayWeb.PublishController do
       attrs
     end
   end
+
+  # Sanitize header values to prevent header injection attacks
+  # Removes newlines and other control characters that could be used to inject headers
+  defp sanitize_header_value(value) do
+    value
+    |> String.replace(~r/[\r\n\x00-\x1f]/, "")
+    |> String.trim()
+  end
+
+  # Block security-sensitive headers that shouldn't be forwarded
+  @blocked_headers ~w(
+    host
+    content-length
+    transfer-encoding
+    connection
+    keep-alive
+    proxy-authenticate
+    proxy-authorization
+    te
+    trailer
+    upgrade
+  )
+  defp blocked_header?(name), do: String.downcase(name) in @blocked_headers
 
   defp check_dedup(tenant, %{dedup_key: dedup_key}) when is_binary(dedup_key) do
     case Messages.get_by_dedup_key(tenant, dedup_key) do
@@ -201,8 +227,19 @@ defmodule RelayWeb.PublishController do
 
   defp check_dedup(_, _), do: :ok
 
+  # Maximum delay: 7 days in seconds
+  @max_delay_seconds 7 * 24 * 60 * 60
+
   # Parse delay string like "30s", "5m", "2h", "1d" to seconds
+  # Caps delay at 7 days to prevent unreasonable scheduling
   defp parse_delay(delay) do
+    delay
+    |> parse_delay_value()
+    |> max(0)
+    |> min(@max_delay_seconds)
+  end
+
+  defp parse_delay_value(delay) do
     case Integer.parse(delay) do
       {value, "s"} -> value
       {value, "m"} -> value * 60
