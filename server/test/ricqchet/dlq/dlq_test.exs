@@ -233,10 +233,11 @@ defmodule Ricqchet.DlqTest do
     test "rejects URLs pointing to blocked IPs" do
       {:ok, %{tenant: tenant}} = create_tenant_with_api_key()
 
+      # Use 10.x.x.x which is always blocked (127.x.x.x is allowed in test config for Bypass)
       {:error, changeset} =
         Applications.create_application(tenant, %{
           name: "Blocked IP App",
-          dlq_destination_url: "https://127.0.0.1/dlq"
+          dlq_destination_url: "https://10.0.0.1/dlq"
         })
 
       assert %{dlq_destination_url: ["URL resolves to blocked IP address"]} = errors_on(changeset)

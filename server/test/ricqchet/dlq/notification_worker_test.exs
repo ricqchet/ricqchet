@@ -57,11 +57,12 @@ defmodule Ricqchet.Dlq.NotificationWorkerTest do
       {:ok, message} =
         Messages.create(tenant, %{destination_url: "https://example.com/api"}, application)
 
+      # Use 10.x.x.x which is always blocked (127.x.x.x is allowed in test config for Bypass)
       job = %Oban.Job{
         args: %{
           "type" => "message",
           "entity_id" => message.id,
-          "destination_url" => "https://127.0.0.1/webhook"
+          "destination_url" => "https://10.0.0.1/webhook"
         }
       }
 
