@@ -78,11 +78,13 @@ mix dialyzer          # Type checking
 
 ## Documentation
 
+- [Overview](docs/overview.md) - What Ricqchet is and how it works
 - [API Reference](docs/api-reference.md) - Endpoints, headers, and examples
 - [Authentication](docs/authentication.md) - Multi-tenant setup and API keys
 - [Batching](docs/batching.md) - Message batching configuration
 - [Delivery](docs/delivery.md) - Retry behavior and delivered headers
 - [Configuration](docs/configuration.md) - Application configuration
+- [Receiving Webhooks](docs/receiving-webhooks.md) - Guide for webhook consumers
 
 Interactive API docs available at `/api/docs` when the server is running.
 
