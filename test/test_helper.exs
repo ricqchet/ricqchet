@@ -1,2 +1,2 @@
 ExUnit.start()
-Ecto.Adapters.SQL.Sandbox.mode(Relay.Repo, :manual)
+Ecto.Adapters.SQL.Sandbox.mode(Ricqchet.Repo, :manual)

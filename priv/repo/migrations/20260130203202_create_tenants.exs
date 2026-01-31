@@ -1,4 +1,4 @@
-defmodule Relay.Repo.Migrations.CreateTenants do
+defmodule Ricqchet.Repo.Migrations.CreateTenants do
   use Ecto.Migration
 
   def change do

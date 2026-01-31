@@ -1,4 +1,4 @@
-defmodule Relay.Repo.Migrations.CreateBatches do
+defmodule Ricqchet.Repo.Migrations.CreateBatches do
   use Ecto.Migration
 
   def change do

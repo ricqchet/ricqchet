@@ -1,4 +1,4 @@
-defmodule Relay.Repo.Migrations.CreateMessages do
+defmodule Ricqchet.Repo.Migrations.CreateMessages do
   use Ecto.Migration
 
   def change do

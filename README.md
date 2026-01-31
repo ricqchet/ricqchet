@@ -1,8 +1,8 @@
-# Relay
+# Ricqchet
 
 HTTP message queuing service with guaranteed delivery, similar to [Upstash QStash](https://upstash.com/docs/qstash/overall/getstarted).
 
-Relay allows serverless functions to POST events that are queued and delivered to destination URLs with automatic retries and exponential backoff.
+Ricqchet allows serverless functions to POST events that are queued and delivered to destination URLs with automatic retries and exponential backoff.
 
 ## Features
 
@@ -45,7 +45,7 @@ mix phx.server
 
 ```elixir
 # In iex -S mix
-{:ok, tenant} = Relay.Tenants.create_tenant(%{name: "My App"})
+{:ok, tenant} = Ricqchet.Tenants.create_tenant(%{name: "My App"})
 # Save the api_key - it's only shown once!
 tenant.api_key
 ```
@@ -78,14 +78,14 @@ Publishes a message to be delivered to the destination URL.
 
 | Header | Description | Example |
 |--------|-------------|---------|
-| `Relay-Delay` | Delay before first attempt | `30s`, `5m`, `2h`, `1d` |
-| `Relay-Dedup-Key` | Deduplication key | `order-123` |
-| `Relay-Dedup-TTL` | Dedup window in seconds (default: 300) | `600` |
-| `Relay-Retries` | Override max retries (default: 3) | `5` |
-| `Relay-Forward-*` | Headers to forward (prefix stripped) | `Relay-Forward-X-Custom: value` |
-| `Relay-Batch-Key` | Group messages into a batch (opt-in batching) | `user-123-events` |
-| `Relay-Batch-Size` | Max messages per batch (1-1000, default: 10) | `50` |
-| `Relay-Batch-Timeout` | Seconds before batch is sent (1-3600, default: 5) | `30` |
+| `Ricqchet-Delay` | Delay before first attempt | `30s`, `5m`, `2h`, `1d` |
+| `Ricqchet-Dedup-Key` | Deduplication key | `order-123` |
+| `Ricqchet-Dedup-TTL` | Dedup window in seconds (default: 300) | `600` |
+| `Ricqchet-Retries` | Override max retries (default: 3) | `5` |
+| `Ricqchet-Forward-*` | Headers to forward (prefix stripped) | `Ricqchet-Forward-X-Custom: value` |
+| `Ricqchet-Batch-Key` | Group messages into a batch (opt-in batching) | `user-123-events` |
+| `Ricqchet-Batch-Size` | Max messages per batch (1-1000, default: 10) | `50` |
+| `Ricqchet-Batch-Timeout` | Seconds before batch is sent (1-3600, default: 5) | `30` |
 
 **Example:**
 
@@ -93,8 +93,8 @@ Publishes a message to be delivered to the destination URL.
 curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/webhook" \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
-  -H "Relay-Delay: 30s" \
-  -H "Relay-Dedup-Key: order-123" \
+  -H "Ricqchet-Delay: 30s" \
+  -H "Ricqchet-Dedup-Key: order-123" \
   -d '{"event": "order.created", "data": {"id": 123}}'
 ```
 
@@ -115,14 +115,14 @@ curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/webhook" 
 
 ### Batching
 
-When you include the `Relay-Batch-Key` header, messages are collected into batches and delivered together as a JSON array in a single HTTP request. This reduces the number of HTTP calls to your destination endpoint.
+When you include the `Ricqchet-Batch-Key` header, messages are collected into batches and delivered together as a JSON array in a single HTTP request. This reduces the number of HTTP calls to your destination endpoint.
 
 **How batching works:**
 
 1. Messages with the same `tenant + destination_url + batch_key` are grouped together
 2. A batch is dispatched when either:
-   - The batch reaches `Relay-Batch-Size` messages (default: 10)
-   - The `Relay-Batch-Timeout` expires (default: 5 seconds)
+   - The batch reaches `Ricqchet-Batch-Size` messages (default: 10)
+   - The `Ricqchet-Batch-Timeout` expires (default: 5 seconds)
 3. The destination receives a JSON array containing all message payloads
 
 **Example - Publishing batched messages:**
@@ -132,23 +132,23 @@ When you include the `Relay-Batch-Key` header, messages are collected into batch
 curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/events" \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
-  -H "Relay-Batch-Key: user-123-events" \
-  -H "Relay-Batch-Size: 3" \
-  -H "Relay-Batch-Timeout: 60" \
+  -H "Ricqchet-Batch-Key: user-123-events" \
+  -H "Ricqchet-Batch-Size: 3" \
+  -H "Ricqchet-Batch-Timeout: 60" \
   -d '{"event": "page_view", "page": "/home"}'
 
 # Second message added to same batch
 curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/events" \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
-  -H "Relay-Batch-Key: user-123-events" \
+  -H "Ricqchet-Batch-Key: user-123-events" \
   -d '{"event": "page_view", "page": "/products"}'
 
 # Third message triggers immediate dispatch (batch size reached)
 curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/events" \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
-  -H "Relay-Batch-Key: user-123-events" \
+  -H "Ricqchet-Batch-Key: user-123-events" \
   -d '{"event": "add_to_cart", "product_id": 456}'
 ```
 
@@ -164,8 +164,8 @@ curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/events" \
 
 **Batching constraints:**
 
-- `Relay-Batch-Size`: 1 to 1000 messages (default: 10)
-- `Relay-Batch-Timeout`: 1 to 3600 seconds (default: 5)
+- `Ricqchet-Batch-Size`: 1 to 1000 messages (default: 10)
+- `Ricqchet-Batch-Timeout`: 1 to 3600 seconds (default: 5)
 - Batched messages share the same retry behavior - if delivery fails, the entire batch is retried
 
 ### Get Message Status
@@ -252,15 +252,15 @@ A delivery is considered failed if:
 
 ## Delivered Headers
 
-When Relay delivers a message, it includes these headers:
+When Ricqchet delivers a message, it includes these headers:
 
 | Header | Description |
 |--------|-------------|
 | `Content-Type` | Original content type |
-| `User-Agent` | `Relay/1.0` |
-| `X-Relay-Message-Id` | Message UUID |
-| `X-Relay-Attempt` | Current attempt number |
-| + any `Relay-Forward-*` headers | Forwarded with prefix stripped |
+| `User-Agent` | `Ricqchet/1.0` |
+| `X-Ricqchet-Message-Id` | Message UUID |
+| `X-Ricqchet-Attempt` | Current attempt number |
+| + any `Ricqchet-Forward-*` headers | Forwarded with prefix stripped |
 
 ## Development
 
@@ -302,8 +302,8 @@ Key configuration options in `config/`:
 
 ```elixir
 # config/config.exs
-config :relay, Oban,
-  repo: Relay.Repo,
+config :ricqchet, Oban,
+  repo: Ricqchet.Repo,
   plugins: [Oban.Plugins.Pruner],
   queues: [delivery: 50]  # 50 concurrent delivery workers
 ```

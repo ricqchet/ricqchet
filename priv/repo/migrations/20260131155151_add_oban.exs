@@ -1,4 +1,4 @@
-defmodule Relay.Repo.Migrations.AddOban do
+defmodule Ricqchet.Repo.Migrations.AddOban do
   use Ecto.Migration
 
   def up, do: Oban.Migration.up()

@@ -7,29 +7,29 @@
 # General application configuration
 import Config
 
-config :relay,
-  ecto_repos: [Relay.Repo],
+config :ricqchet,
+  ecto_repos: [Ricqchet.Repo],
   generators: [timestamp_type: :utc_datetime, binary_id: true]
 
 # Configure the endpoint
-config :relay, RelayWeb.Endpoint,
+config :ricqchet, RicqchetWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
-    formats: [json: RelayWeb.ErrorJSON],
+    formats: [json: RicqchetWeb.ErrorJSON],
     layout: false
   ],
-  pubsub_server: Relay.PubSub,
+  pubsub_server: Ricqchet.PubSub,
   live_view: [signing_salt: "1AOKs4fr"]
 
 # Configure Oban for job processing
-config :relay, Oban,
-  repo: Relay.Repo,
+config :ricqchet, Oban,
+  repo: Ricqchet.Repo,
   plugins: [Oban.Plugins.Pruner],
   queues: [delivery: 50]
 
 # Batch delivery configuration
-config :relay,
+config :ricqchet,
   batch_default_max_size: 10,
   batch_default_timeout_seconds: 5,
   batch_dispatcher_enabled: true
