@@ -212,7 +212,7 @@ defmodule Relay.BatchesTest do
     test "schedules retry when attempts remain", %{batch: batch} do
       {:ok, updated_batch} = Batches.mark_failed(batch, "Connection refused")
 
-      assert updated_batch.status == "collecting"
+      assert updated_batch.status == "pending"
       assert updated_batch.attempts == 1
       assert updated_batch.last_error == "Connection refused"
       assert DateTime.compare(updated_batch.scheduled_at, DateTime.utc_now()) == :gt

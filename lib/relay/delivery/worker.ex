@@ -17,10 +17,20 @@ defmodule Relay.Delivery.Worker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"message_id" => message_id}}) do
-    message = Messages.get!(message_id)
+    case Messages.get(message_id) do
+      nil ->
+        # Message was deleted between enqueue and delivery
+        Logger.info("Message #{message_id} not found, likely deleted")
+        :ok
 
+      message ->
+        deliver_message(message)
+    end
+  end
+
+  defp deliver_message(message) do
     Logger.info(
-      "Delivering message #{message_id} to #{message.destination_url} (attempt #{message.attempts + 1})"
+      "Delivering message #{message.id} to #{message.destination_url} (attempt #{message.attempts + 1})"
     )
 
     result = HttpClient.deliver(message)

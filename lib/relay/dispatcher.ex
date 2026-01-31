@@ -5,6 +5,14 @@ defmodule Relay.Dispatcher do
   Runs on a configurable interval (default 100ms) and claims pending messages
   that are ready for delivery (scheduled_at <= now). For each claimed message,
   it inserts an Oban job for the delivery worker.
+
+  ## Configuration
+
+  Configure in your application config:
+
+      config :relay, Relay.Dispatcher,
+        poll_interval_ms: 100,
+        max_messages_per_cycle: 100
   """
 
   use GenServer
@@ -14,7 +22,8 @@ defmodule Relay.Dispatcher do
   alias Relay.Delivery.Worker
   alias Relay.Messages
 
-  @poll_interval_ms 100
+  @default_poll_interval_ms 100
+  @default_max_messages_per_cycle 100
 
   # Client API
 
@@ -32,7 +41,7 @@ defmodule Relay.Dispatcher do
 
   @impl GenServer
   def handle_info(:poll, state) do
-    dispatch_pending()
+    dispatch_pending(max_messages_per_cycle())
     schedule_poll()
     {:noreply, state}
   end
@@ -40,15 +49,16 @@ defmodule Relay.Dispatcher do
   # Private functions
 
   defp schedule_poll do
-    Process.send_after(self(), :poll, @poll_interval_ms)
+    Process.send_after(self(), :poll, poll_interval_ms())
   end
 
-  defp dispatch_pending do
+  defp dispatch_pending(0), do: :ok
+
+  defp dispatch_pending(remaining) do
     case Messages.claim_next_pending() do
       {:ok, message} ->
         enqueue_delivery(message)
-        # Try to dispatch more messages
-        dispatch_pending()
+        dispatch_pending(remaining - 1)
 
       {:error, :none_available} ->
         :ok
@@ -65,5 +75,15 @@ defmodule Relay.Dispatcher do
       {:error, reason} ->
         Logger.error("Failed to enqueue delivery for message #{message.id}: #{inspect(reason)}")
     end
+  end
+
+  defp poll_interval_ms do
+    config = Application.get_env(:relay, __MODULE__, [])
+    Keyword.get(config, :poll_interval_ms, @default_poll_interval_ms)
+  end
+
+  defp max_messages_per_cycle do
+    config = Application.get_env(:relay, __MODULE__, [])
+    Keyword.get(config, :max_messages_per_cycle, @default_max_messages_per_cycle)
   end
 end

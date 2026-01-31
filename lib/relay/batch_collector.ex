@@ -40,16 +40,27 @@ defmodule Relay.BatchCollector do
   defp create_and_maybe_dispatch(tenant, batch, message_attrs) do
     case Messages.create_for_batch(tenant, batch, message_attrs) do
       {:ok, message} ->
-        {:ok, updated_batch, status} = Batches.increment_message_count(batch)
-
-        if status == :ready do
-          Batches.schedule_for_immediate_dispatch(updated_batch)
-        end
-
+        handle_message_count_increment(batch)
         {:ok, message}
 
       {:error, changeset} ->
         {:error, changeset}
+    end
+  end
+
+  defp handle_message_count_increment(batch) do
+    case Batches.increment_message_count(batch) do
+      {:ok, updated_batch, :ready} ->
+        Batches.schedule_for_immediate_dispatch(updated_batch)
+
+      {:ok, _updated_batch, :collecting} ->
+        :ok
+
+      {:error, reason} ->
+        # Log the error but don't fail the message creation
+        # The batch will eventually be dispatched by timeout
+        require Logger
+        Logger.warning("Failed to increment batch count: #{inspect(reason)}")
     end
   end
 end
