@@ -1,6 +1,6 @@
 # Ricqchet
 
-Elixir client for [Ricqchet](https://github.com/doomspork/tacoma) HTTP message queue service.
+Elixir client for [Ricqchet](https://github.com/doomspork/ricqchet) HTTP message queue service.
 
 ## Installation
 

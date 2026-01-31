@@ -27,7 +27,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/doomspork/tacoma.git",
+    "url": "https://github.com/doomspork/ricqchet.git",
     "directory": "clients/typescript"
   },
   "devDependencies": {
