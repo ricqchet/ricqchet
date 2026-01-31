@@ -9,6 +9,8 @@ defmodule Relay.Messages.Message do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Relay.UrlValidator
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -117,12 +119,9 @@ defmodule Relay.Messages.Message do
 
   defp validate_url(changeset, field) do
     validate_change(changeset, field, fn _, value ->
-      case URI.parse(value) do
-        %URI{scheme: scheme, host: host} when scheme in ["http", "https"] and is_binary(host) ->
-          []
-
-        _ ->
-          [{field, "must be a valid HTTP(S) URL"}]
+      case UrlValidator.validate_url(value) do
+        :ok -> []
+        {:error, reason} -> [{field, reason}]
       end
     end)
   end
