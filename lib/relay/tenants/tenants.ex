@@ -40,7 +40,9 @@ defmodule Relay.Tenants do
   @doc """
   Gets a tenant by API key.
 
-  This performs an Argon2 verification against all tenants' hashed keys.
+  Uses a prefix-based O(1) lookup to find the candidate tenant,
+  then performs constant-time Argon2 verification.
+
   Returns `nil` if no matching tenant is found.
 
   ## Examples
@@ -53,18 +55,36 @@ defmodule Relay.Tenants do
 
   """
   def get_by_api_key(api_key) when is_binary(api_key) do
-    # Get all active tenants and verify against each hash
-    # This is O(n) but acceptable for reasonable tenant counts
-    # For high scale, consider using a prefix-based lookup
-    Tenant
-    |> where([t], t.status == "active")
-    |> Repo.all()
-    |> Enum.find(fn tenant ->
-      Argon2.verify_pass(api_key, tenant.api_key_hash)
-    end)
+    prefix_length = Tenant.api_key_prefix_length()
+    prefix = String.slice(api_key, 0, prefix_length)
+
+    # O(1) lookup using the prefix index
+    tenant =
+      Tenant
+      |> where([t], t.api_key_prefix == ^prefix)
+      |> where([t], t.status == "active")
+      |> Repo.one()
+
+    # Constant-time verification to prevent timing attacks
+    verify_api_key(tenant, api_key)
   end
 
   def get_by_api_key(_), do: nil
+
+  # Always perform the hash comparison to ensure constant timing
+  defp verify_api_key(nil, _api_key) do
+    # Perform a dummy verification to prevent timing attacks
+    Argon2.no_user_verify()
+    nil
+  end
+
+  defp verify_api_key(tenant, api_key) do
+    if Argon2.verify_pass(api_key, tenant.api_key_hash) do
+      tenant
+    else
+      nil
+    end
+  end
 
   @doc """
   Updates a tenant.
