@@ -15,7 +15,7 @@ defmodule Ricqchet.Repo.Migrations.CreateUsers do
       timestamps(type: :utc_datetime_usec)
     end
 
-    create unique_index(:users, [:email])
+    create unique_index(:users, [:tenant_id, :email])
     create index(:users, [:tenant_id])
     create index(:users, [:tenant_id, :status])
   end

@@ -38,7 +38,7 @@ defmodule Ricqchet.Users.User do
     |> validate_length(:email, max: 160)
     |> validate_inclusion(:status, ["active", "suspended", "pending"])
     |> validate_inclusion(:role, ["admin", "member", "viewer"])
-    |> unique_constraint(:email)
+    |> unique_constraint([:tenant_id, :email])
     |> foreign_key_constraint(:tenant_id)
   end
 

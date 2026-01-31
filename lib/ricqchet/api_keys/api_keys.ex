@@ -112,7 +112,8 @@ defmodule Ricqchet.ApiKeys do
   @doc """
   Rotates an API key by revoking the old one and creating a new one.
 
-  Returns the new API key with the plaintext value in the virtual field.
+  Returns `{:ok, %ApiKey{api_key: "..."}}` with the new plaintext value,
+  or `{:error, reason}` on failure.
   """
   def rotate_api_key(%ApiKey{} = old_api_key) do
     application = Repo.preload(old_api_key, :application).application
