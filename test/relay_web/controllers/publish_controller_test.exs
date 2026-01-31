@@ -1,7 +1,6 @@
 defmodule RelayWeb.PublishControllerTest do
   use RelayWeb.ConnCase, async: false
 
-  alias Relay.BatchCollector
   alias Relay.Batches
   alias Relay.Messages
   alias Relay.Tenants
@@ -46,16 +45,7 @@ defmodule RelayWeb.PublishControllerTest do
   end
 
   describe "create/2 with batching" do
-    setup do
-      # Start BatchCollector for batch tests
-      {:ok, pid} = BatchCollector.start_link([])
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: GenServer.stop(pid)
-      end)
-
-      :ok
-    end
+    # BatchCollector is now a stateless module, no setup needed
 
     test "publishes message to a batch", %{conn: conn, tenant: tenant} do
       conn =

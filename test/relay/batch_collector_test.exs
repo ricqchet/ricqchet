@@ -1,5 +1,5 @@
 defmodule Relay.BatchCollectorTest do
-  use Relay.DataCase, async: false
+  use Relay.DataCase, async: true
 
   alias Relay.BatchCollector
   alias Relay.Batches
@@ -7,14 +7,6 @@ defmodule Relay.BatchCollectorTest do
 
   setup do
     {:ok, tenant} = Tenants.create_tenant(%{name: "Test Tenant"})
-
-    # Start BatchCollector for this test
-    {:ok, pid} = BatchCollector.start_link([])
-
-    on_exit(fn ->
-      if Process.alive?(pid), do: GenServer.stop(pid)
-    end)
-
     %{tenant: tenant}
   end
 
@@ -98,7 +90,7 @@ defmodule Relay.BatchCollectorTest do
       assert msg1.batch_id != msg2.batch_id
     end
 
-    test "dispatches batch when max_size reached", %{tenant: tenant} do
+    test "schedules batch for immediate dispatch when max_size reached", %{tenant: tenant} do
       batch_opts = %{max_size: 2}
 
       {:ok, msg1} =
@@ -113,6 +105,10 @@ defmodule Relay.BatchCollectorTest do
           batch_opts
         )
 
+      batch_before = Batches.get(msg1.batch_id)
+      # First message - batch should have scheduled_at in the future (timeout-based)
+      assert batch_before.message_count == 1
+
       {:ok, _msg2} =
         BatchCollector.add_message(
           tenant,
@@ -125,14 +121,11 @@ defmodule Relay.BatchCollectorTest do
           batch_opts
         )
 
-      # Give Oban a moment to process (inline mode)
-      Process.sleep(50)
-
-      # Batch should have been dispatched (may be back to collecting after failed delivery)
-      batch = Batches.get(msg1.batch_id)
-      # After dispatch, if delivery fails it goes back to "collecting" for retry
-      # So we check that at least one attempt was made
-      assert batch.attempts >= 1 or batch.status in ["dispatched", "delivered", "failed"]
+      batch_after = Batches.get(msg1.batch_id)
+      # Second message reaches max_size - scheduled_at should be set to now (immediate dispatch)
+      assert batch_after.message_count == 2
+      # scheduled_at should be <= now for immediate dispatch
+      assert DateTime.compare(batch_after.scheduled_at, DateTime.utc_now()) in [:lt, :eq]
     end
 
     test "respects custom batch options", %{tenant: tenant} do
@@ -153,34 +146,6 @@ defmodule Relay.BatchCollectorTest do
       batch = Batches.get(message.batch_id)
       assert batch.max_size == 50
       assert batch.timeout_seconds == 30
-    end
-  end
-
-  describe "timeout behavior" do
-    test "dispatches batch after timeout", %{tenant: tenant} do
-      # Use a very short timeout for testing
-      batch_opts = %{timeout_seconds: 1, max_size: 100}
-
-      {:ok, message} =
-        BatchCollector.add_message(
-          tenant,
-          "order-events",
-          "https://example.com/api",
-          %{
-            destination_url: "https://example.com/api",
-            payload: ~s({"event": "test"})
-          },
-          batch_opts
-        )
-
-      # Wait for timeout to fire (plus some buffer)
-      Process.sleep(1500)
-
-      # Batch should have been dispatched (may be back to collecting after failed delivery)
-      batch = Batches.get(message.batch_id)
-      # After dispatch, if delivery fails it goes back to "collecting" for retry
-      # So we check that at least one attempt was made
-      assert batch.attempts >= 1 or batch.status in ["dispatched", "delivered", "failed"]
     end
   end
 end

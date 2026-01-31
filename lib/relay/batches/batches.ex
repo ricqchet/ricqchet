@@ -101,6 +101,20 @@ defmodule Relay.Batches do
   end
 
   @doc """
+  Schedules a batch for immediate dispatch by setting scheduled_at to now.
+
+  This is called when a batch reaches max_size and should be dispatched
+  immediately by the BatchDispatcher.
+  """
+  def schedule_for_immediate_dispatch(%Batch{} = batch) do
+    now = DateTime.utc_now()
+
+    batch
+    |> Batch.changeset(%{scheduled_at: now})
+    |> Repo.update()
+  end
+
+  @doc """
   Claims the next batch ready for dispatch.
 
   A batch is ready when:

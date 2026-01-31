@@ -16,7 +16,7 @@ defmodule Relay.Application do
         {Oban, Application.fetch_env!(:relay, Oban)}
       ]
       |> Enum.concat(dispatcher_child())
-      |> Enum.concat(batch_collector_child())
+      |> Enum.concat(batch_dispatcher_child())
       |> Enum.concat([RelayWeb.Endpoint])
 
     # See https://hexdocs.pm/elixir/Supervisor.html
@@ -33,9 +33,9 @@ defmodule Relay.Application do
     end
   end
 
-  defp batch_collector_child do
-    if Application.get_env(:relay, :batch_collector_enabled, true) do
-      [Relay.BatchCollector]
+  defp batch_dispatcher_child do
+    if Application.get_env(:relay, :batch_dispatcher_enabled, true) do
+      [Relay.BatchDispatcher]
     else
       []
     end
