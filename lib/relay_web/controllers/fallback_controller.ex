@@ -12,19 +12,32 @@ defmodule RelayWeb.FallbackController do
   Handles various error types and renders appropriate JSON responses.
 
   Supported errors:
-  - `{:error, %Ecto.Changeset{}}` - Validation errors (422)
+  - `{:error, %Ecto.Changeset{}}` - Validation errors (422) or duplicate (409)
   - `{:error, :not_found}` - Resource not found (404)
   - `{:error, :already_dispatched}` - Message already dispatched (409)
   - `{:error, :duplicate, existing_id}` - Duplicate message (409)
   """
   def call(conn, {:error, %Ecto.Changeset{} = changeset}) do
-    conn
-    |> put_status(:unprocessable_entity)
-    |> put_view(json: RelayWeb.ErrorJSON)
-    |> render(:error,
-      error: "validation_error",
-      message: format_changeset_errors(changeset)
-    )
+    # Check if this is a duplicate dedup_key constraint violation
+    # This handles race conditions where two requests with same dedup_key
+    # both pass the initial check but one fails at insert time
+    if duplicate_dedup_error?(changeset) do
+      conn
+      |> put_status(:conflict)
+      |> put_view(json: RelayWeb.ErrorJSON)
+      |> render(:error,
+        error: "duplicate_message",
+        message: "A message with this dedup_key already exists"
+      )
+    else
+      conn
+      |> put_status(:unprocessable_entity)
+      |> put_view(json: RelayWeb.ErrorJSON)
+      |> render(:error,
+        error: "validation_error",
+        message: format_changeset_errors(changeset)
+      )
+    end
   end
 
   def call(conn, {:error, :not_found}) do
@@ -61,5 +74,13 @@ defmodule RelayWeb.FallbackController do
       end)
     end)
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
+  end
+
+  # Check if the changeset error is due to duplicate dedup_key
+  defp duplicate_dedup_error?(changeset) do
+    case changeset.errors[:dedup_key] do
+      {_msg, [constraint: :unique, constraint_name: "messages_dedup_index"]} -> true
+      _ -> false
+    end
   end
 end
