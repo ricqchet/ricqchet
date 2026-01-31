@@ -32,7 +32,7 @@ config :relay, Oban,
 config :relay,
   batch_default_max_size: 10,
   batch_default_timeout_seconds: 5,
-  batch_collector_enabled: true
+  batch_dispatcher_enabled: true
 
 # Configure Elixir's Logger
 config :logger, :default_formatter,
