@@ -4,6 +4,7 @@ defmodule Relay.Messages do
   """
 
   import Ecto.Query
+  import Relay.DeliveryHelpers
 
   alias Relay.Messages.Message
   alias Relay.Repo
@@ -175,27 +176,4 @@ defmodule Relay.Messages do
   end
 
   def cancel(%Message{}), do: {:error, :already_dispatched}
-
-  # Exponential backoff: 10s, 30s, 90s, 270s, ... capped at 8 hours
-  defp backoff_seconds(attempt) do
-    base = 10
-    max_backoff = 8 * 60 * 60
-
-    backoff = trunc(base * :math.pow(3, attempt - 1))
-    min(backoff, max_backoff)
-  end
-
-  defp format_error(error) when is_binary(error), do: error
-  defp format_error({:http_error, status}), do: "HTTP #{status}"
-  defp format_error(%{reason: reason}), do: inspect(reason)
-  defp format_error(error), do: inspect(error)
-
-  defp truncate_body(nil), do: nil
-  defp truncate_body(body) when is_binary(body), do: String.slice(body, 0, 10_000)
-
-  defp truncate_body(body) do
-    body
-    |> inspect()
-    |> String.slice(0, 10_000)
-  end
 end
