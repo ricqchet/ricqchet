@@ -17,6 +17,14 @@ defmodule RicqchetWeb.Router do
     get "/health", HealthController, :index
   end
 
+  # OpenAPI documentation endpoints
+  scope "/api" do
+    pipe_through :api
+
+    get "/openapi", OpenApiSpex.Plug.RenderSpec, spec: RicqchetWeb.ApiSpec
+    get "/docs", OpenApiSpex.Plug.SwaggerUI, path: "/api/openapi"
+  end
+
   # API v1 endpoints (auth required)
   scope "/v1", RicqchetWeb do
     pipe_through [:api, :authenticated]
