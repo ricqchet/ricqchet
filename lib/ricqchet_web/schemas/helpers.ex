@@ -22,7 +22,7 @@ defmodule RicqchetWeb.Schemas.Helpers do
   Generates standard show endpoint responses (200 + errors).
   """
   @spec show_responses(module(), [integer()]) :: map()
-  def show_responses(schema, error_codes \\ [401, 404]) do
+  def show_responses(schema, error_codes \\ [401, 404, 429]) do
     Map.merge(
       %{200 => json_response(schema, "Success")},
       error_responses(error_codes)
@@ -33,7 +33,7 @@ defmodule RicqchetWeb.Schemas.Helpers do
   Generates standard create endpoint responses (201/202 + errors).
   """
   @spec create_responses(module(), integer(), [integer()]) :: map()
-  def create_responses(schema, success_code \\ 202, error_codes \\ [401, 409, 422]) do
+  def create_responses(schema, success_code \\ 202, error_codes \\ [401, 409, 422, 429]) do
     Map.merge(
       %{success_code => json_response(schema, "Accepted")},
       error_responses(error_codes)
@@ -44,7 +44,7 @@ defmodule RicqchetWeb.Schemas.Helpers do
   Generates standard delete endpoint responses (200 + errors).
   """
   @spec delete_responses(module(), [integer()]) :: map()
-  def delete_responses(schema, error_codes \\ [401, 404, 409]) do
+  def delete_responses(schema, error_codes \\ [401, 404, 409, 429]) do
     Map.merge(
       %{200 => json_response(schema, "Success")},
       error_responses(error_codes)

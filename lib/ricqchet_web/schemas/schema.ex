@@ -11,8 +11,6 @@ defmodule RicqchetWeb.Schema do
     quote do
       require OpenApiSpex
 
-      import RicqchetWeb.Schemas.Helpers
-
       alias OpenApiSpex.Schema
       alias RicqchetWeb.Schemas
     end
