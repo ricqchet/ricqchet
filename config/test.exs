@@ -27,6 +27,9 @@ config :ricqchet, Oban, testing: :inline
 config :ricqchet, dispatcher_enabled: false
 config :ricqchet, batch_dispatcher_enabled: false
 
+# Allow localhost URLs for integration tests with Bypass
+config :ricqchet, allow_localhost_urls: true
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

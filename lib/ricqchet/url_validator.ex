@@ -12,7 +12,7 @@ defmodule Ricqchet.UrlValidator do
 
   import Bitwise
 
-  @blocked_hostnames ~w(
+  @default_blocked_hostnames ~w(
     localhost
     localhost.localdomain
     ip6-localhost
@@ -20,6 +20,14 @@ defmodule Ricqchet.UrlValidator do
   )
 
   @blocked_suffixes ~w(.local .localhost .internal)
+
+  defp blocked_hostnames do
+    if Application.get_env(:ricqchet, :allow_localhost_urls, false) do
+      @default_blocked_hostnames -- ["localhost"]
+    else
+      @default_blocked_hostnames
+    end
+  end
 
   @doc """
   Validates that a URL is safe to request.
@@ -69,7 +77,7 @@ defmodule Ricqchet.UrlValidator do
   end
 
   defp blocked_hostname?(host) do
-    host in @blocked_hostnames or
+    host in blocked_hostnames() or
       Enum.any?(@blocked_suffixes, &String.ends_with?(host, &1))
   end
 
@@ -135,7 +143,10 @@ defmodule Ricqchet.UrlValidator do
   end
 
   # IPv4 blocked ranges
-  defp blocked_ip?({127, _, _, _}), do: true
+  defp blocked_ip?({127, _, _, _}) do
+    not Application.get_env(:ricqchet, :allow_localhost_urls, false)
+  end
+
   defp blocked_ip?({10, _, _, _}), do: true
   defp blocked_ip?({172, b, _, _}) when b >= 16 and b <= 31, do: true
   defp blocked_ip?({192, 168, _, _}), do: true
@@ -144,7 +155,10 @@ defmodule Ricqchet.UrlValidator do
   defp blocked_ip?({0, _, _, _}), do: true
 
   # IPv6 blocked ranges
-  defp blocked_ip?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
+  defp blocked_ip?({0, 0, 0, 0, 0, 0, 0, 1}) do
+    not Application.get_env(:ricqchet, :allow_localhost_urls, false)
+  end
+
   defp blocked_ip?({0, 0, 0, 0, 0, 0, 0, 0}), do: true
   defp blocked_ip?({a, _, _, _, _, _, _, _}) when a >= 0xFE80 and a <= 0xFEBF, do: true
   defp blocked_ip?({a, _, _, _, _, _, _, _}) when a >= 0xFC00 and a <= 0xFDFF, do: true
