@@ -4,9 +4,7 @@ defmodule Ricqchet.MixProject do
   def project do
     [
       app: :ricqchet,
-      # x-release-please-start-version
       version: "0.1.0",
-      # x-release-please-end
       elixir: "~> 1.16",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
