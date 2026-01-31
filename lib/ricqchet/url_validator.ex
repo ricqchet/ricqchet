@@ -21,6 +21,11 @@ defmodule Ricqchet.UrlValidator do
 
   @blocked_suffixes ~w(.local .localhost .internal)
 
+  # Returns the list of blocked hostnames, conditionally allowing "localhost"
+  # when the :allow_localhost_urls config is true. This is used in test environments
+  # to enable integration testing with Bypass, which creates local HTTP servers
+  # on localhost. Only "localhost" is removed (not localhost.localdomain, ip6-localhost,
+  # etc.) because Bypass specifically binds to localhost.
   defp blocked_hostnames do
     if Application.get_env(:ricqchet, :allow_localhost_urls, false) do
       @default_blocked_hostnames -- ["localhost"]

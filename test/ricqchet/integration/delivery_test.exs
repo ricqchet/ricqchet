@@ -245,7 +245,7 @@ defmodule Ricqchet.Integration.DeliveryTest do
 
       assert json_response(conn, 202)["message_id"]
 
-      # Wait for timeout to elapse
+      # Wait for timeout to elapse (1s timeout + 100ms buffer for processing)
       Process.sleep(1100)
 
       # Batch should be ready due to timeout
