@@ -80,6 +80,8 @@ defmodule Relay.BatchDispatcher do
 
       {:error, reason} ->
         Logger.error("Failed to enqueue batch delivery for batch #{batch.id}: #{inspect(reason)}")
+        # Revert status to prevent batch from being stuck in "dispatched" forever
+        Batches.revert_to_pending(batch)
     end
   end
 

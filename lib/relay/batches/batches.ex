@@ -78,26 +78,30 @@ defmodule Relay.Batches do
   end
 
   @doc """
-  Increments the message count for a batch.
+  Atomically increments the message count for a batch using SQL.
 
   Returns `{:ok, batch, :ready}` if the batch is ready to dispatch (size reached),
   or `{:ok, batch, :collecting}` if still collecting.
+
+  Uses SQL `SET message_count = message_count + 1` to avoid race conditions
+  when multiple requests increment the count concurrently.
   """
-  def increment_message_count(%Batch{} = batch) do
-    new_count = batch.message_count + 1
+  def increment_message_count(%Batch{id: batch_id, max_size: max_size}) do
+    query =
+      from b in Batch,
+        where: b.id == ^batch_id,
+        select: b
 
-    changeset = Batch.changeset(batch, %{message_count: new_count})
-
-    case Repo.update(changeset) do
-      {:ok, updated_batch} ->
-        if updated_batch.message_count >= updated_batch.max_size do
+    case Repo.update_all(query, inc: [message_count: 1]) do
+      {1, [updated_batch]} ->
+        if updated_batch.message_count >= max_size do
           {:ok, updated_batch, :ready}
         else
           {:ok, updated_batch, :collecting}
         end
 
-      {:error, changeset} ->
-        {:error, changeset}
+      {0, _} ->
+        {:error, :batch_not_found}
     end
   end
 
@@ -283,4 +287,21 @@ defmodule Relay.Batches do
   end
 
   defp decode_payload(payload), do: payload
+
+  @doc """
+  Reverts a dispatched batch back to pending status.
+
+  Used when job queue insertion fails to prevent batches from being
+  stuck in "dispatched" status forever.
+  """
+  def revert_to_pending(%Batch{status: "dispatched"} = batch) do
+    batch
+    |> Batch.changeset(%{
+      status: "pending",
+      dispatched_at: nil
+    })
+    |> Repo.update()
+  end
+
+  def revert_to_pending(%Batch{} = batch), do: {:ok, batch}
 end

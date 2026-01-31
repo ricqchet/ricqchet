@@ -14,6 +14,7 @@ defmodule Relay.BatchCollector do
 
   alias Relay.Batches
   alias Relay.Messages
+  alias Relay.Repo
   alias Relay.Tenants.Tenant
 
   @doc """
@@ -38,14 +39,19 @@ defmodule Relay.BatchCollector do
   end
 
   defp create_and_maybe_dispatch(tenant, batch, message_attrs) do
-    case Messages.create_for_batch(tenant, batch, message_attrs) do
-      {:ok, message} ->
-        handle_message_count_increment(batch)
-        {:ok, message}
+    # Use a transaction to ensure message creation and count increment
+    # happen atomically - prevents race condition where message exists
+    # but count was never incremented
+    Repo.transaction(fn ->
+      case Messages.create_for_batch(tenant, batch, message_attrs) do
+        {:ok, message} ->
+          handle_message_count_increment(batch)
+          message
 
-      {:error, changeset} ->
-        {:error, changeset}
-    end
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
   end
 
   defp handle_message_count_increment(batch) do
