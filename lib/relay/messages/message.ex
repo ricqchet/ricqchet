@@ -39,6 +39,7 @@ defmodule Relay.Messages.Message do
     field :flow_control_key, :string
 
     belongs_to :tenant, Relay.Tenants.Tenant
+    belongs_to :batch, Relay.Batches.Batch
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -64,7 +65,8 @@ defmodule Relay.Messages.Message do
       :dedup_key,
       :dedup_expires_at,
       :flow_control_key,
-      :tenant_id
+      :tenant_id,
+      :batch_id
     ])
     |> validate_required([:destination_url, :scheduled_at, :flow_control_key, :tenant_id])
     |> validate_inclusion(:status, @statuses)

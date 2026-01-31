@@ -28,6 +28,12 @@ config :relay, Oban,
   plugins: [Oban.Plugins.Pruner],
   queues: [delivery: 50]
 
+# Batch delivery configuration
+config :relay,
+  batch_default_max_size: 10,
+  batch_default_timeout_seconds: 5,
+  batch_collector_enabled: true
+
 # Configure Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
