@@ -21,8 +21,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Verify Fly.io configuration
+        run: |
+          if [ ! -f "fly.toml" ]; then
+            echo "Error: fly.toml not found in the repository."
+            echo "Please run 'flyctl launch' locally to initialize your Fly.io app,"
+            echo "then commit the generated fly.toml (and Dockerfile if required) before deploying."
+            exit 1
+          fi
+
       - name: Setup Fly CLI
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@v1
 
       - name: Deploy to Fly.io
         run: flyctl deploy --remote-only
