@@ -69,7 +69,7 @@ Returns `{"status": "ok"}` - no authentication required.
 ### Publish Message
 
 ```
-POST /v1/publish/{destination_url}
+POST /v1/publish
 ```
 
 Publishes a message to be delivered to the destination URL.
@@ -78,6 +78,7 @@ Publishes a message to be delivered to the destination URL.
 
 | Header | Description | Example |
 |--------|-------------|---------|
+| `Ricqchet-Destination` | Destination URL (required) | `https://api.example.com/webhook` |
 | `Ricqchet-Delay` | Delay before first attempt | `30s`, `5m`, `2h`, `1d` |
 | `Ricqchet-Dedup-Key` | Deduplication key | `order-123` |
 | `Ricqchet-Dedup-TTL` | Dedup window in seconds (default: 300) | `600` |
@@ -90,9 +91,10 @@ Publishes a message to be delivered to the destination URL.
 **Example:**
 
 ```bash
-curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/webhook" \
+curl -X POST "http://localhost:4000/v1/publish" \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
+  -H "Ricqchet-Destination: https://api.example.com/webhook" \
   -H "Ricqchet-Delay: 30s" \
   -H "Ricqchet-Dedup-Key: order-123" \
   -d '{"event": "order.created", "data": {"id": 123}}'
@@ -129,25 +131,28 @@ When you include the `Ricqchet-Batch-Key` header, messages are collected into ba
 
 ```bash
 # First message starts a new batch
-curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/events" \
+curl -X POST "http://localhost:4000/v1/publish" \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
+  -H "Ricqchet-Destination: https://api.example.com/events" \
   -H "Ricqchet-Batch-Key: user-123-events" \
   -H "Ricqchet-Batch-Size: 3" \
   -H "Ricqchet-Batch-Timeout: 60" \
   -d '{"event": "page_view", "page": "/home"}'
 
 # Second message added to same batch
-curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/events" \
+curl -X POST "http://localhost:4000/v1/publish" \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
+  -H "Ricqchet-Destination: https://api.example.com/events" \
   -H "Ricqchet-Batch-Key: user-123-events" \
   -d '{"event": "page_view", "page": "/products"}'
 
 # Third message triggers immediate dispatch (batch size reached)
-curl -X POST "http://localhost:4000/v1/publish/https://api.example.com/events" \
+curl -X POST "http://localhost:4000/v1/publish" \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
+  -H "Ricqchet-Destination: https://api.example.com/events" \
   -H "Ricqchet-Batch-Key: user-123-events" \
   -d '{"event": "add_to_cart", "product_id": 456}'
 ```

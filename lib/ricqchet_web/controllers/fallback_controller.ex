@@ -64,6 +64,13 @@ defmodule RicqchetWeb.FallbackController do
     )
   end
 
+  def call(conn, {:error, :validation, message}) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error, error: "validation_error", message: message)
+  end
+
   defp format_changeset_errors(changeset) do
     changeset
     |> Ecto.Changeset.traverse_errors(fn {msg, opts} ->

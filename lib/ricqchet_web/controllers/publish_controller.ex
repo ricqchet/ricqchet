@@ -20,22 +20,13 @@ defmodule RicqchetWeb.PublishController do
     description: """
     Publishes a message to be delivered to the destination URL.
 
-    The destination URL is captured from the wildcard path. Various `Ricqchet-*` headers
-    control message behavior including delays, deduplication, retries, and batching.
+    The destination URL is specified in the `Ricqchet-Destination` header. Various other
+    `Ricqchet-*` headers control message behavior including delays, deduplication, retries,
+    and batching.
 
     #{Schemas.PublishHeaders.forward_header_description()}
     """,
-    parameters:
-      [
-        destination_url: [
-          in: :path,
-          type: :string,
-          required: true,
-          description:
-            "Full destination URL including scheme (e.g., https://example.com/webhook). " <>
-              "This is a wildcard path parameter that captures all segments after /v1/publish/."
-        ]
-      ] ++ Schemas.PublishHeaders.parameters(),
+    parameters: Schemas.PublishHeaders.parameters(),
     request_body:
       {"Message payload", "application/json",
        %Schema{
@@ -50,9 +41,10 @@ defmodule RicqchetWeb.PublishController do
   @doc """
   Publishes a message to be delivered to the destination URL.
 
-  The destination URL is captured from the wildcard path parameter.
+  The destination URL is specified in the `Ricqchet-Destination` header.
   Various Ricqchet-* headers control message behavior:
 
+  - `Ricqchet-Destination`: Full destination URL (required)
   - `Ricqchet-Delay`: Delay before first attempt (e.g., "30s", "5m", "2h", "1d")
   - `Ricqchet-Dedup-Key`: Deduplication key
   - `Ricqchet-Dedup-TTL`: Dedup window in seconds (default: 300)
@@ -62,16 +54,34 @@ defmodule RicqchetWeb.PublishController do
   - `Ricqchet-Batch-Size`: Max messages per batch (default: 10)
   - `Ricqchet-Batch-Timeout`: Seconds before batch is sent (default: 5)
   """
-  def create(conn, %{"destination_url" => destination_parts}) do
+  def create(conn, _params) do
     tenant = conn.assigns.current_tenant
-    destination_url = build_destination_url(destination_parts)
 
-    case get_batch_key(conn) do
-      nil ->
-        create_individual_message(conn, tenant, destination_url)
+    case get_destination_url(conn) do
+      {:ok, destination_url} ->
+        case get_batch_key(conn) do
+          nil ->
+            create_individual_message(conn, tenant, destination_url)
 
-      batch_key ->
-        create_batched_message(conn, tenant, destination_url, batch_key)
+          batch_key ->
+            create_batched_message(conn, tenant, destination_url, batch_key)
+        end
+
+      {:error, reason} ->
+        {:error, :validation, reason}
+    end
+  end
+
+  defp get_destination_url(conn) do
+    case get_req_header(conn, "ricqchet-destination") do
+      [url | _] ->
+        case Ricqchet.UrlValidator.validate_url(url) do
+          :ok -> {:ok, url}
+          {:error, reason} -> {:error, "destination_url: #{reason}"}
+        end
+
+      [] ->
+        {:error, "Ricqchet-Destination header is required"}
     end
   end
 
@@ -163,24 +173,6 @@ defmodule RicqchetWeb.PublishController do
     timeout
     |> max(1)
     |> min(@max_batch_timeout)
-  end
-
-  defp build_destination_url(parts) when is_list(parts) do
-    # Phoenix collapses consecutive slashes in wildcard routes, so we need to
-    # reconstruct the URL properly. e.g., ["https:", "example.com", "api"] -> "https://example.com/api"
-    case parts do
-      [scheme, host | rest] when scheme in ["http:", "https:"] ->
-        path = Enum.join(rest, "/")
-
-        if path == "" do
-          "#{scheme}//#{host}"
-        else
-          "#{scheme}//#{host}/#{path}"
-        end
-
-      _ ->
-        Enum.join(parts, "/")
-    end
   end
 
   defp put_payload(attrs, conn) do

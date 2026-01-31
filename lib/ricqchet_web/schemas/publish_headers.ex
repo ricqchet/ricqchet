@@ -12,6 +12,14 @@ defmodule RicqchetWeb.Schemas.PublishHeaders do
   def parameters do
     [
       %Parameter{
+        name: "Ricqchet-Destination",
+        in: :header,
+        required: true,
+        schema: %Schema{type: :string, format: :uri},
+        description:
+          "Full destination URL including scheme (e.g., https://example.com/webhook). The message payload will be delivered to this URL."
+      },
+      %Parameter{
         name: "Ricqchet-Delay",
         in: :header,
         required: false,
