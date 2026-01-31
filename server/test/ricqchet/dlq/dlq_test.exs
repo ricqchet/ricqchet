@@ -36,9 +36,19 @@ defmodule Ricqchet.DlqTest do
       {:ok, message} =
         Messages.create(tenant, %{destination_url: "https://example.com/api"}, application)
 
-      # In inline testing mode, the job is executed immediately
-      # The :ok return confirms the job was successfully enqueued
-      assert :ok = Dlq.maybe_notify_failure(message)
+      # Use manual mode to verify enqueuing without immediate execution
+      Oban.Testing.with_testing_mode(:manual, fn ->
+        assert :ok = Dlq.maybe_notify_failure(message)
+
+        assert_enqueued(
+          worker: Ricqchet.Dlq.NotificationWorker,
+          args: %{
+            type: "message",
+            entity_id: message.id,
+            destination_url: "https://dlq.example.com/webhook"
+          }
+        )
+      end)
     end
 
     test "does nothing when DLQ destination is empty string" do
@@ -79,9 +89,40 @@ defmodule Ricqchet.DlqTest do
           application
         )
 
-      # In inline testing mode, the job is executed immediately
-      # The :ok return confirms the job was successfully enqueued
-      assert :ok = Dlq.maybe_notify_failure(batch)
+      # Use manual mode to verify enqueuing without immediate execution
+      Oban.Testing.with_testing_mode(:manual, fn ->
+        assert :ok = Dlq.maybe_notify_failure(batch)
+
+        assert_enqueued(
+          worker: Ricqchet.Dlq.NotificationWorker,
+          args: %{
+            type: "batch",
+            entity_id: batch.id,
+            destination_url: "https://dlq.example.com/webhook"
+          }
+        )
+      end)
+    end
+
+    test "does nothing when DLQ destination is whitespace-only" do
+      {:ok, %{tenant: tenant, application: application}} =
+        create_tenant_with_api_key(%{}, %{dlq_destination_url: "   "})
+
+      {:ok, batch, :new} =
+        Batches.find_or_create_collecting(
+          tenant,
+          "https://example.com/api",
+          "test-key",
+          %{},
+          application
+        )
+
+      # Use manual mode to verify no job enqueued
+      Oban.Testing.with_testing_mode(:manual, fn ->
+        # Whitespace-only should be treated as no destination configured
+        assert :ok = Dlq.maybe_notify_failure(batch)
+        refute_enqueued(worker: Ricqchet.Dlq.NotificationWorker)
+      end)
     end
   end
 
@@ -162,6 +203,55 @@ defmodule Ricqchet.DlqTest do
       {:ok, %{application: application}} = create_tenant_with_api_key()
 
       assert Applications.get_dlq_destination(application) == nil
+    end
+
+    test "rejects HTTP URLs (must be HTTPS)" do
+      {:ok, %{tenant: tenant}} = create_tenant_with_api_key()
+
+      {:error, changeset} =
+        Applications.create_application(tenant, %{
+          name: "HTTP DLQ App",
+          dlq_destination_url: "http://insecure.example.com/dlq"
+        })
+
+      assert %{dlq_destination_url: ["DLQ destination must use HTTPS for security"]} =
+               errors_on(changeset)
+    end
+
+    test "rejects invalid URLs" do
+      {:ok, %{tenant: tenant}} = create_tenant_with_api_key()
+
+      {:error, changeset} =
+        Applications.create_application(tenant, %{
+          name: "Invalid DLQ App",
+          dlq_destination_url: "not-a-url"
+        })
+
+      assert %{dlq_destination_url: [_]} = errors_on(changeset)
+    end
+
+    test "rejects URLs pointing to blocked IPs" do
+      {:ok, %{tenant: tenant}} = create_tenant_with_api_key()
+
+      {:error, changeset} =
+        Applications.create_application(tenant, %{
+          name: "Blocked IP App",
+          dlq_destination_url: "https://127.0.0.1/dlq"
+        })
+
+      assert %{dlq_destination_url: ["URL resolves to blocked IP address"]} = errors_on(changeset)
+    end
+
+    test "allows valid HTTPS URLs" do
+      {:ok, %{tenant: tenant}} = create_tenant_with_api_key()
+
+      {:ok, app} =
+        Applications.create_application(tenant, %{
+          name: "Valid DLQ App",
+          dlq_destination_url: "https://valid-dlq.example.com/webhook"
+        })
+
+      assert app.dlq_destination_url == "https://valid-dlq.example.com/webhook"
     end
   end
 end

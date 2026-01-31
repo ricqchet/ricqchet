@@ -7,6 +7,9 @@ defmodule Ricqchet.Dlq.NotificationWorker do
 
   The webhook payload includes details about the failed entity and the
   associated application and tenant for context.
+
+  DLQ notifications are only sent over HTTPS to protect sensitive failure
+  metadata from interception.
   """
 
   use Oban.Worker,
@@ -29,16 +32,52 @@ defmodule Ricqchet.Dlq.NotificationWorker do
       }) do
     with {:ok, message} <- get_message(id),
          message <- Repo.preload(message, application: :tenant),
-         :ok <- UrlValidator.validate_url(url) do
+         :ok <- validate_https_url(url) do
       send_notification(url, build_message_payload(message))
+    else
+      {:error, :not_found} ->
+        Logger.warning("DLQ notification message #{inspect(id)} not found, discarding job")
+        :ok
+
+      {:error, :insecure_url} ->
+        Logger.warning(
+          "DLQ notification rejected: URL #{inspect(url)} is not HTTPS, discarding job"
+        )
+
+        :ok
+
+      {:error, :invalid_url} ->
+        Logger.warning(
+          "DLQ notification rejected: URL #{inspect(url)} is invalid, discarding job"
+        )
+
+        :ok
     end
   end
 
   def perform(%Oban.Job{args: %{"type" => "batch", "entity_id" => id, "destination_url" => url}}) do
     with {:ok, batch} <- get_batch(id),
          batch <- Repo.preload(batch, application: :tenant),
-         :ok <- UrlValidator.validate_url(url) do
+         :ok <- validate_https_url(url) do
       send_notification(url, build_batch_payload(batch))
+    else
+      {:error, :not_found} ->
+        Logger.warning("DLQ notification batch #{inspect(id)} not found, discarding job")
+        :ok
+
+      {:error, :insecure_url} ->
+        Logger.warning(
+          "DLQ notification rejected: URL #{inspect(url)} is not HTTPS, discarding job"
+        )
+
+        :ok
+
+      {:error, :invalid_url} ->
+        Logger.warning(
+          "DLQ notification rejected: URL #{inspect(url)} is invalid, discarding job"
+        )
+
+        :ok
     end
   end
 
@@ -53,6 +92,19 @@ defmodule Ricqchet.Dlq.NotificationWorker do
     case Batches.get(id) do
       nil -> {:error, :not_found}
       batch -> {:ok, batch}
+    end
+  end
+
+  defp validate_https_url(url) do
+    case URI.parse(url) do
+      %URI{scheme: "https"} ->
+        case UrlValidator.validate_url(url) do
+          :ok -> :ok
+          {:error, _} -> {:error, :invalid_url}
+        end
+
+      _ ->
+        {:error, :insecure_url}
     end
   end
 
@@ -118,10 +170,7 @@ defmodule Ricqchet.Dlq.NotificationWorker do
   defp send_notification(url, payload) do
     case Req.post(url,
            json: payload,
-           headers: [
-             {"user-agent", "Ricqchet-DLQ/1.0"},
-             {"content-type", "application/json"}
-           ],
+           headers: [{"user-agent", "Ricqchet-DLQ/1.0"}],
            receive_timeout: @receive_timeout,
            connect_options: [timeout: @connect_timeout],
            retry: false

@@ -26,7 +26,7 @@ defmodule Ricqchet.Dlq do
   def maybe_notify_failure(%Ricqchet.Messages.Message{} = message) do
     message = Repo.preload(message, :application)
 
-    case Applications.get_dlq_destination(message.application) do
+    case get_trimmed_destination(message.application) do
       nil -> :ok
       "" -> :ok
       url -> enqueue_notification(:message, message.id, url)
@@ -38,10 +38,17 @@ defmodule Ricqchet.Dlq do
   def maybe_notify_failure(%Ricqchet.Batches.Batch{} = batch) do
     batch = Repo.preload(batch, :application)
 
-    case Applications.get_dlq_destination(batch.application) do
+    case get_trimmed_destination(batch.application) do
       nil -> :ok
       "" -> :ok
       url -> enqueue_notification(:batch, batch.id, url)
+    end
+  end
+
+  defp get_trimmed_destination(application) do
+    case Applications.get_dlq_destination(application) do
+      nil -> nil
+      url when is_binary(url) -> String.trim(url)
     end
   end
 

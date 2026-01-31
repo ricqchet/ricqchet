@@ -8,7 +8,9 @@ Configure a DLQ destination URL on an application. When messages published throu
 
 ### Setting DLQ Destination
 
-The `dlq_destination_url` is an optional field on applications. Set it when creating or updating an application:
+The `dlq_destination_url` is an optional field on applications. Set it when creating or updating an application.
+
+**Security Note:** DLQ destination URLs must use HTTPS. HTTP URLs are rejected to prevent sensitive failure metadata from being transmitted over unencrypted connections.
 
 ```elixir
 # When creating an application
@@ -141,12 +143,21 @@ A DLQ notification is considered successful when the endpoint returns a 2xx stat
 
 If the DLQ notification fails, Oban retries with its default exponential backoff. After 3 failed attempts, the notification is abandoned (it will not be retried further).
 
+## Security
+
+DLQ notifications contain sensitive failure metadata including tenant and application identifiers, destination URLs, and error details. To protect this data:
+
+- **HTTPS required** - DLQ destination URLs must use HTTPS. HTTP URLs are rejected at configuration time and at notification delivery time.
+- **SSRF protection** - URLs pointing to private IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x), localhost, or link-local addresses are blocked.
+- **No credentials in URLs** - Avoid including API keys or tokens in the DLQ URL path or query string.
+
 ## Best Practices
 
 1. **Monitor your DLQ endpoint** - If DLQ notifications fail, you won't know about message failures
 2. **Return 200 quickly** - Process notifications asynchronously to avoid timeouts
 3. **Be idempotent** - DLQ notifications could potentially be delivered more than once
 4. **Log the message ID** - Use the `message.id` or `batch.id` to correlate with your systems
+5. **Secure your endpoint** - Consider authentication for your DLQ endpoint (e.g., shared secret in a header)
 
 ## Example: Alerting on Failures
 
