@@ -32,6 +32,7 @@ defmodule RicqchetWeb.Router do
     post "/publish", PublishController, :create
     get "/messages/:id", MessageController, :show
     delete "/messages/:id", MessageController, :delete
+    get "/signing-secret", TenantController, :signing_secret
   end
 
   # Enable LiveDashboard in development with basic auth protection
