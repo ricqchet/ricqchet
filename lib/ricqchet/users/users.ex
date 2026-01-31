@@ -53,21 +53,23 @@ defmodule Ricqchet.Users do
   end
 
   @doc """
-  Authenticates a user by email and password.
+  Authenticates a user for a given tenant by email and password.
 
+  Only authenticates users with `status: "active"`.
   Returns `{:ok, user}` on success or `{:error, :invalid_credentials}` on failure.
 
   ## Examples
 
-      iex> authenticate_user("user@example.com", "correct_password")
+      iex> authenticate_user(tenant, "user@example.com", "correct_password")
       {:ok, %User{}}
 
-      iex> authenticate_user("user@example.com", "wrong_password")
+      iex> authenticate_user(tenant, "user@example.com", "wrong_password")
       {:error, :invalid_credentials}
 
   """
-  def authenticate_user(email, password) when is_binary(email) and is_binary(password) do
-    user = get_user_by_email(email)
+  def authenticate_user(%Tenant{} = tenant, email, password)
+      when is_binary(email) and is_binary(password) do
+    user = get_user_by_email_and_tenant(email, tenant)
     verify_password(user, password)
   end
 
@@ -130,11 +132,16 @@ defmodule Ricqchet.Users do
     {:error, :invalid_credentials}
   end
 
-  defp verify_password(user, password) do
+  defp verify_password(%User{status: "active"} = user, password) do
     if Argon2.verify_pass(password, user.password_hash) do
       {:ok, user}
     else
       {:error, :invalid_credentials}
     end
+  end
+
+  defp verify_password(%User{}, _password) do
+    # User exists but is not active (suspended/pending)
+    {:error, :invalid_credentials}
   end
 end
