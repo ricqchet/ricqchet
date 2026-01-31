@@ -52,7 +52,8 @@ When delivery fails, Ricqchet waits and tries again with increasing delays:
 | 1 | 10 seconds |
 | 2 | 30 seconds |
 | 3 | 90 seconds |
-| 4+ | Continues growing (max 8 hours) |
+| 4 | 270 seconds |
+| 5+ | Continues growing (max 8 hours) |
 
 The default is 3 retries. You can customize this per-message or disable retries entirely for fire-and-forget delivery.
 

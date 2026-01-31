@@ -70,7 +70,7 @@ Content-Type: application/json
 
 ### Timeouts
 
-Ricqchet waits up to 30 seconds for your response. If your endpoint needs longer:
+Ricqchet uses a 10-second connection timeout and waits up to 30 seconds to receive your response. If your endpoint needs longer:
 
 1. Return `202 Accepted` immediately
 2. Process the message asynchronously
