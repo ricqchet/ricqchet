@@ -1,79 +1,96 @@
 # Ricqchet
 
-HTTP message queuing service with guaranteed delivery, similar to [Upstash QStash](https://upstash.com/docs/qstash/overall/getstarted).
+HTTP message queuing with guaranteed delivery.
 
-Ricqchet allows serverless functions to POST events that are queued and delivered to destination URLs with automatic retries and exponential backoff.
+## Packages
 
-## Features
+| Package | Description |
+|---------|-------------|
+| [server](./server) | Ricqchet server (Elixir/Phoenix) |
+| [elixir-client](./clients/elixir) | Elixir client library |
+| [typescript-client](./clients/typescript) | TypeScript client library |
 
-- **Guaranteed delivery** with automatic retries and exponential backoff
-- **Multi-tenant** architecture with application-scoped API keys
-- **Fan-out** to broadcast messages to multiple destinations
-- **Deduplication** to prevent duplicate message processing
-- **Delayed delivery** with configurable scheduling (up to 7 days)
-- **Message batching** for efficient bulk delivery
-- **Header forwarding** to destination endpoints
-- **Message status tracking** with detailed attempt history
-- **OpenAPI documentation** at `/api/docs`
+## Overview
 
-## Tech Stack
+Ricqchet allows serverless functions to POST events that are queued and delivered to destination URLs with automatic retries and exponential backoff. Key features:
 
-- Elixir 1.18+ / OTP 27+
-- Phoenix 1.8+ (API only)
-- PostgreSQL 15+
-- Oban for reliable job processing
+- **Guaranteed delivery** with configurable retries
+- **Delayed delivery** with scheduling support
+- **Deduplication** to prevent duplicate processing
+- **Batching** to group messages efficiently
+- **Fan-out** to broadcast to multiple destinations
+- **HMAC signatures** for webhook verification
 
-## Getting Started
+## Quick Start
 
-### Prerequisites
-
-- Erlang 27+
-- Elixir 1.18+
-- PostgreSQL 15+
-
-If using [mise](https://mise.jdx.dev/), run `mise install` to set up the correct versions.
-
-### Setup
+### Server
 
 ```bash
+cd server
 mix setup
 mix phx.server
 ```
 
-### Create Credentials
+### Elixir Client
 
 ```elixir
-# In iex -S mix
-alias Ricqchet.{Tenants, Applications, ApiKeys}
+defmodule MyApp.Queue do
+  use Ricqchet.Client,
+    base_url: "https://your-ricqchet.fly.dev",
+    api_key: {:system, "RICQCHET_API_KEY"},
+    destination: "https://webhook.example.com"
+end
 
-# 1. Create a tenant (organization)
-{:ok, tenant} = Tenants.create_tenant(%{name: "My Organization"})
-
-# 2. Create an application
-{:ok, app} = Applications.create_application(tenant, %{name: "My App"})
-
-# 3. Create an API key - save this, it's only shown once!
-{:ok, api_key} = ApiKeys.create_api_key(app, %{name: "Production"})
-IO.puts("API Key: #{api_key.api_key}")
+MyApp.Queue.publish(%{event: "order.created", id: 123})
 ```
 
-### Publish a Message
+### TypeScript Client
 
-```bash
-curl -X POST "http://localhost:4000/v1/publish" \
-  -H "Authorization: Bearer <your_api_key>" \
-  -H "Content-Type: application/json" \
-  -H "Ricqchet-Destination: https://httpbin.org/post" \
-  -d '{"hello": "world"}'
+```typescript
+import { RicqchetClient } from '@ricqchet/client';
+
+const client = new RicqchetClient({
+  baseUrl: 'https://your-ricqchet.fly.dev',
+  apiKey: process.env.RICQCHET_API_KEY!
+});
+
+await client.publish('https://webhook.example.com', { event: 'order.created', id: 123 });
 ```
 
 ## Development
 
+### Prerequisites
+
+- Erlang 27+ / Elixir 1.18+
+- Node.js 20+
+- PostgreSQL 15+
+
+Use [mise](https://mise.jdx.dev/) to install the correct tool versions: `mise install`
+
+### Running Tests
+
 ```bash
-mix test              # Run tests
-mix format            # Format code
-mix credo --strict    # Static analysis
-mix dialyzer          # Type checking
+# Server
+cd server && mix test
+
+# Elixir client
+cd clients/elixir && mix test
+
+# TypeScript client
+cd clients/typescript && npm test
+```
+
+### Code Quality
+
+```bash
+# Server
+cd server && mix format && mix credo --strict && mix dialyzer
+
+# Elixir client
+cd clients/elixir && mix format && mix credo --strict
+
+# TypeScript client
+cd clients/typescript && npm run lint && npm run format:check
 ```
 
 ## Documentation
@@ -87,6 +104,16 @@ mix dialyzer          # Type checking
 - [Receiving Webhooks](docs/receiving-webhooks.md) - Guide for webhook consumers
 
 Interactive API docs available at `/api/docs` when the server is running.
+
+## Commit Conventions
+
+This repo uses [Conventional Commits](https://www.conventionalcommits.org/) with component scopes:
+
+```
+feat(server): add webhook signature verification
+feat(elixir-client): add batch timeout validation
+fix(typescript-client): handle undefined headers
+```
 
 ## License
 
