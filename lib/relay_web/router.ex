@@ -7,6 +7,7 @@ defmodule RelayWeb.Router do
 
   pipeline :authenticated do
     plug RelayWeb.Plugs.Authenticate
+    plug RelayWeb.Plugs.RateLimiter
   end
 
   # Health check endpoint (no auth required)
@@ -25,19 +26,29 @@ defmodule RelayWeb.Router do
     delete "/messages/:id", MessageController, :delete
   end
 
-  # Enable LiveDashboard in development
+  # Enable LiveDashboard in development with basic auth protection
   if Application.compile_env(:relay, :dev_routes) do
-    # If you want to use the LiveDashboard in production, you should put
-    # it behind authentication and allow only admins to access it.
-    # If your application does not have an admins-only section yet,
-    # you can use Plug.BasicAuth to set up some basic authentication
-    # as long as you are also using SSL (which you should anyway).
     import Phoenix.LiveDashboard.Router
 
+    pipeline :dashboard_auth do
+      plug :fetch_session
+      plug :protect_from_forgery
+      plug :dashboard_basic_auth
+    end
+
     scope "/dev" do
-      pipe_through [:fetch_session, :protect_from_forgery]
+      pipe_through [:dashboard_auth]
 
       live_dashboard "/dashboard", metrics: RelayWeb.Telemetry
+    end
+
+    # Basic auth for dashboard - uses env vars or defaults for dev
+    # Defined inside the compile-time block to avoid unused function warning
+    defp dashboard_basic_auth(conn, _opts) do
+      username = System.get_env("DASHBOARD_USER") || "admin"
+      password = System.get_env("DASHBOARD_PASSWORD") || "relay_dev_password"
+
+      Plug.BasicAuth.basic_auth(conn, username: username, password: password)
     end
   end
 end
