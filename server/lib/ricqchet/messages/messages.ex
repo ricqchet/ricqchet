@@ -53,6 +53,18 @@ defmodule Ricqchet.Messages do
   def get(id), do: Repo.get(Message, id)
 
   @doc """
+  Gets a message by ID with tenant preloaded for delivery.
+
+  The tenant is needed to access the signing_secret for HMAC signatures.
+  """
+  def get_for_delivery(id) do
+    Message
+    |> where([m], m.id == ^id)
+    |> preload(:tenant)
+    |> Repo.one()
+  end
+
+  @doc """
   Gets a message by ID, raising if not found.
   """
   def get!(id), do: Repo.get!(Message, id)

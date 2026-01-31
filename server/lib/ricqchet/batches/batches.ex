@@ -25,6 +25,18 @@ defmodule Ricqchet.Batches do
   def get!(id), do: Repo.get!(Batch, id)
 
   @doc """
+  Gets a batch by ID for delivery, preloading the tenant for signing.
+
+  Raises if not found.
+  """
+  def get_for_delivery!(id) do
+    Batch
+    |> where([b], b.id == ^id)
+    |> preload(:tenant)
+    |> Repo.one!()
+  end
+
+  @doc """
   Gets a batch by ID for a specific tenant.
   """
   def get_by_tenant(%Tenant{id: tenant_id}, batch_id) do

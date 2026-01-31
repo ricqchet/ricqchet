@@ -17,7 +17,7 @@ defmodule Ricqchet.Delivery.Worker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"message_id" => message_id}}) do
-    case Messages.get(message_id) do
+    case Messages.get_for_delivery(message_id) do
       nil ->
         # Message was deleted between enqueue and delivery
         Logger.info("Message #{message_id} not found, likely deleted")
