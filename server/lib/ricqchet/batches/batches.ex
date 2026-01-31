@@ -50,7 +50,13 @@ defmodule Ricqchet.Batches do
 
   Batches are identified by tenant_id + destination_url + batch_key.
   """
-  def find_or_create_collecting(%Tenant{} = tenant, destination_url, batch_key, opts \\ %{}) do
+  def find_or_create_collecting(
+        %Tenant{} = tenant,
+        destination_url,
+        batch_key,
+        opts \\ %{},
+        application \\ nil
+      ) do
     query =
       from b in Batch,
         where: b.tenant_id == ^tenant.id,
@@ -63,7 +69,7 @@ defmodule Ricqchet.Batches do
       Repo.transaction(fn ->
         case Repo.one(query) do
           nil ->
-            create_batch(tenant, destination_url, batch_key, opts)
+            create_batch(tenant, destination_url, batch_key, opts, application)
 
           batch ->
             {:existing, batch}
@@ -78,16 +84,20 @@ defmodule Ricqchet.Batches do
     end
   end
 
-  defp create_batch(tenant, destination_url, batch_key, opts) do
+  defp create_batch(tenant, destination_url, batch_key, opts, application) do
     attrs =
       opts
       |> Map.put(:destination_url, destination_url)
       |> Map.put(:batch_key, batch_key)
+      |> maybe_add_application_id(application)
 
     %Batch{}
     |> Batch.create_changeset(tenant, attrs)
     |> Repo.insert()
   end
+
+  defp maybe_add_application_id(attrs, nil), do: attrs
+  defp maybe_add_application_id(attrs, %{id: id}), do: Map.put(attrs, :application_id, id)
 
   @doc """
   Atomically increments the message count for a batch using SQL.
@@ -223,22 +233,36 @@ defmodule Ricqchet.Batches do
 
   @doc """
   Marks a batch as failed and schedules a retry if attempts remain.
+
+  If the batch is permanently failed (attempts >= max_retries), triggers
+  a DLQ notification if the application has a DLQ destination configured.
   """
   def mark_failed(%Batch{} = batch, error, response \\ nil) do
     attempts = batch.attempts + 1
     now = DateTime.utc_now()
+    permanently_failed = attempts >= batch.max_retries
     changes = build_failure_changes(batch, attempts, now, error, response)
 
-    Repo.transaction(fn ->
-      {:ok, updated_batch} =
-        batch
-        |> Batch.changeset(changes)
-        |> Repo.update()
+    result =
+      Repo.transaction(fn ->
+        {:ok, updated_batch} =
+          batch
+          |> Batch.changeset(changes)
+          |> Repo.update()
 
-      maybe_fail_messages(batch, attempts, now, error, response)
+        maybe_fail_messages(batch, attempts, now, error, response)
 
-      updated_batch
-    end)
+        updated_batch
+      end)
+
+    case result do
+      {:ok, updated_batch} when permanently_failed ->
+        Ricqchet.Dlq.maybe_notify_failure(updated_batch)
+        {:ok, updated_batch}
+
+      other ->
+        other
+    end
   end
 
   defp build_failure_changes(batch, attempts, now, error, response) do

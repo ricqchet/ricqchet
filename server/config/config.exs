@@ -26,7 +26,7 @@ config :ricqchet, RicqchetWeb.Endpoint,
 config :ricqchet, Oban,
   repo: Ricqchet.Repo,
   plugins: [Oban.Plugins.Pruner],
-  queues: [delivery: 50]
+  queues: [delivery: 50, dlq_notifications: 10]
 
 # Batch delivery configuration
 config :ricqchet,

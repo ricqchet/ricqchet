@@ -91,6 +91,8 @@ pending → dispatched → delivered
 | `delivered` | Successfully delivered (2xx response received) |
 | `failed` | All retry attempts exhausted |
 
+When a message reaches the `failed` state, a DLQ notification is sent if the application has a `dlq_destination_url` configured. See [DLQ documentation](dlq.md) for details.
+
 ## Idempotency
 
 Your webhook endpoint should be idempotent. While Ricqchet prevents duplicate publishing via deduplication keys, network issues could cause the same message to be delivered more than once.

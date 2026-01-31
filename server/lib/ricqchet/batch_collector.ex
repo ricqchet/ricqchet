@@ -27,23 +27,30 @@ defmodule Ricqchet.BatchCollector do
         batch_key,
         destination_url,
         message_attrs,
-        batch_opts \\ %{}
+        batch_opts \\ %{},
+        application \\ nil
       ) do
-    case Batches.find_or_create_collecting(tenant, destination_url, batch_key, batch_opts) do
+    case Batches.find_or_create_collecting(
+           tenant,
+           destination_url,
+           batch_key,
+           batch_opts,
+           application
+         ) do
       {:ok, batch, _status} ->
-        create_and_maybe_dispatch(tenant, batch, message_attrs)
+        create_and_maybe_dispatch(tenant, batch, message_attrs, application)
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  defp create_and_maybe_dispatch(tenant, batch, message_attrs) do
+  defp create_and_maybe_dispatch(tenant, batch, message_attrs, application) do
     # Use a transaction to ensure message creation and count increment
     # happen atomically - prevents race condition where message exists
     # but count was never incremented
     Repo.transaction(fn ->
-      case Messages.create_for_batch(tenant, batch, message_attrs) do
+      case Messages.create_for_batch(tenant, batch, message_attrs, application) do
         {:ok, message} ->
           handle_message_count_increment(batch)
           message

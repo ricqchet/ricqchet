@@ -26,6 +26,8 @@ defmodule Ricqchet.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import Ricqchet.DataCase
+
+      use Oban.Testing, repo: Ricqchet.Repo
     end
   end
 
