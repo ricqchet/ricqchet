@@ -17,7 +17,7 @@ defmodule Ricqchet.Delivery.BatchWorker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"batch_id" => batch_id}}) do
-    batch = Batches.get!(batch_id)
+    batch = Batches.get_for_delivery!(batch_id)
     payloads = Batches.get_batch_payloads(batch)
 
     Logger.info(
