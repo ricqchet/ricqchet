@@ -3,17 +3,18 @@ defmodule RicqchetWeb.PublishControllerTest do
 
   alias Ricqchet.Batches
   alias Ricqchet.Messages
-  alias Ricqchet.Tenants
+
+  import Ricqchet.DataCase, only: [create_tenant_with_api_key: 0]
 
   setup %{conn: conn} do
-    {:ok, tenant} = Tenants.create_tenant(%{name: "Test Tenant"})
+    {:ok, %{tenant: tenant, api_key: api_key}} = create_tenant_with_api_key()
 
     conn =
       conn
-      |> put_req_header("authorization", "Bearer #{tenant.api_key}")
+      |> put_req_header("authorization", "Bearer #{api_key.api_key}")
       |> put_req_header("content-type", "application/json")
 
-    %{conn: conn, tenant: tenant}
+    %{conn: conn, tenant: tenant, api_key: api_key}
   end
 
   describe "create/2 without batching" do

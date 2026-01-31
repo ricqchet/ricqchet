@@ -59,4 +59,32 @@ defmodule Ricqchet.DataCase do
       end)
     end)
   end
+
+  @doc """
+  Creates a tenant with an application and API key for testing.
+
+  Returns `{:ok, %{tenant: tenant, application: application, api_key: api_key}}`
+  where `api_key` has the plaintext key in its virtual field.
+
+  ## Examples
+
+      {:ok, %{tenant: tenant, api_key: api_key}} = create_tenant_with_api_key()
+      # Use api_key.api_key for the Bearer token
+
+  """
+  def create_tenant_with_api_key(tenant_attrs \\ %{}, app_attrs \\ %{}, key_attrs \\ %{}) do
+    alias Ricqchet.ApiKeys
+    alias Ricqchet.Applications
+    alias Ricqchet.Tenants
+
+    tenant_attrs = Map.put_new(tenant_attrs, :name, "Test Tenant")
+    app_attrs = Map.put_new(app_attrs, :name, "Test Application")
+    key_attrs = Map.put_new(key_attrs, :name, "Test API Key")
+
+    {:ok, tenant} = Tenants.create_tenant(tenant_attrs)
+    {:ok, application} = Applications.create_application(tenant, app_attrs)
+    {:ok, api_key} = ApiKeys.create_api_key(application, key_attrs)
+
+    {:ok, %{tenant: tenant, application: application, api_key: api_key}}
+  end
 end
