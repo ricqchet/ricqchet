@@ -65,14 +65,32 @@ defmodule RicqchetWeb.PublishControllerTest do
       assert json_response(conn, 422)["error"] == "validation_error"
     end
 
-    test "returns 422 for localhost destination", %{conn: conn} do
+    test "returns 422 for private IP destination", %{conn: conn} do
       conn =
         conn
-        |> put_req_header("ricqchet-destination", "http://localhost/api")
+        |> put_req_header("ricqchet-destination", "http://192.168.1.1/api")
         |> post("/v1/publish", ~s({"event": "test"}))
 
       assert json_response(conn, 422)["error"] == "validation_error"
-      assert json_response(conn, 422)["message"] =~ "not allowed"
+      assert json_response(conn, 422)["message"] =~ "blocked IP"
+    end
+
+    test "blocks localhost when allow_localhost_urls is false", %{conn: conn} do
+      # Temporarily disable localhost URLs to verify production behavior
+      original = Application.get_env(:ricqchet, :allow_localhost_urls)
+      Application.put_env(:ricqchet, :allow_localhost_urls, false)
+
+      try do
+        conn =
+          conn
+          |> put_req_header("ricqchet-destination", "http://localhost/api")
+          |> post("/v1/publish", ~s({"event": "test"}))
+
+        assert json_response(conn, 422)["error"] == "validation_error"
+        assert json_response(conn, 422)["message"] =~ "not allowed"
+      after
+        Application.put_env(:ricqchet, :allow_localhost_urls, original)
+      end
     end
   end
 
