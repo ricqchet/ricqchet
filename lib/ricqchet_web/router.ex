@@ -29,7 +29,7 @@ defmodule RicqchetWeb.Router do
   scope "/v1", RicqchetWeb do
     pipe_through [:api, :authenticated]
 
-    post "/publish/*destination_url", PublishController, :create
+    post "/publish", PublishController, :create
     get "/messages/:id", MessageController, :show
     delete "/messages/:id", MessageController, :delete
   end

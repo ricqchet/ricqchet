@@ -19,7 +19,10 @@ defmodule RicqchetWeb.PublishControllerTest do
 
   describe "create/2 without batching" do
     test "publishes a message", %{conn: conn} do
-      conn = post(conn, "/v1/publish/https://example.com/api", ~s({"event": "test"}))
+      conn =
+        conn
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
+        |> post("/v1/publish", ~s({"event": "test"}))
 
       assert json_response(conn, 202)["message_id"]
     end
@@ -27,8 +30,9 @@ defmodule RicqchetWeb.PublishControllerTest do
     test "publishes with delay header", %{conn: conn} do
       conn =
         conn
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
         |> put_req_header("ricqchet-delay", "30s")
-        |> post("/v1/publish/https://example.com/api", ~s({"event": "test"}))
+        |> post("/v1/publish", ~s({"event": "test"}))
 
       response = json_response(conn, 202)
       message = Messages.get!(response["message_id"])
@@ -39,9 +43,36 @@ defmodule RicqchetWeb.PublishControllerTest do
       conn =
         conn
         |> delete_req_header("authorization")
-        |> post("/v1/publish/https://example.com/api", ~s({"event": "test"}))
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
+        |> post("/v1/publish", ~s({"event": "test"}))
 
       assert json_response(conn, 401)["error"] == "unauthorized"
+    end
+
+    test "returns 422 when destination header is missing", %{conn: conn} do
+      conn = post(conn, "/v1/publish", ~s({"event": "test"}))
+
+      assert json_response(conn, 422)["error"] == "validation_error"
+      assert json_response(conn, 422)["message"] =~ "Ricqchet-Destination header is required"
+    end
+
+    test "returns 422 for invalid destination url", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("ricqchet-destination", "not-a-url")
+        |> post("/v1/publish", ~s({"event": "test"}))
+
+      assert json_response(conn, 422)["error"] == "validation_error"
+    end
+
+    test "returns 422 for localhost destination", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("ricqchet-destination", "http://localhost/api")
+        |> post("/v1/publish", ~s({"event": "test"}))
+
+      assert json_response(conn, 422)["error"] == "validation_error"
+      assert json_response(conn, 422)["message"] =~ "not allowed"
     end
   end
 
@@ -51,8 +82,9 @@ defmodule RicqchetWeb.PublishControllerTest do
     test "publishes message to a batch", %{conn: conn, tenant: tenant} do
       conn =
         conn
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
         |> put_req_header("ricqchet-batch-key", "order-events")
-        |> post("/v1/publish/https://example.com/api", ~s({"event": "order.created"}))
+        |> post("/v1/publish", ~s({"event": "order.created"}))
 
       response = json_response(conn, 202)
       message = Messages.get!(response["message_id"])
@@ -67,8 +99,9 @@ defmodule RicqchetWeb.PublishControllerTest do
       # First message
       conn1 =
         conn
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
         |> put_req_header("ricqchet-batch-key", "order-events")
-        |> post("/v1/publish/https://example.com/api", ~s({"event": "first"}))
+        |> post("/v1/publish", ~s({"event": "first"}))
 
       response1 = json_response(conn1, 202)
       msg1 = Messages.get!(response1["message_id"])
@@ -83,8 +116,9 @@ defmodule RicqchetWeb.PublishControllerTest do
         build_conn()
         |> put_req_header("authorization", auth_header)
         |> put_req_header("content-type", "application/json")
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
         |> put_req_header("ricqchet-batch-key", "order-events")
-        |> post("/v1/publish/https://example.com/api", ~s({"event": "second"}))
+        |> post("/v1/publish", ~s({"event": "second"}))
 
       response2 = json_response(conn2, 202)
       msg2 = Messages.get!(response2["message_id"])
@@ -96,9 +130,10 @@ defmodule RicqchetWeb.PublishControllerTest do
     test "respects custom batch size header", %{conn: conn} do
       conn =
         conn
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
         |> put_req_header("ricqchet-batch-key", "order-events")
         |> put_req_header("ricqchet-batch-size", "50")
-        |> post("/v1/publish/https://example.com/api", ~s({"event": "test"}))
+        |> post("/v1/publish", ~s({"event": "test"}))
 
       response = json_response(conn, 202)
       message = Messages.get!(response["message_id"])
@@ -110,9 +145,10 @@ defmodule RicqchetWeb.PublishControllerTest do
     test "respects custom batch timeout header", %{conn: conn} do
       conn =
         conn
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
         |> put_req_header("ricqchet-batch-key", "order-events")
         |> put_req_header("ricqchet-batch-timeout", "30")
-        |> post("/v1/publish/https://example.com/api", ~s({"event": "test"}))
+        |> post("/v1/publish", ~s({"event": "test"}))
 
       response = json_response(conn, 202)
       message = Messages.get!(response["message_id"])
@@ -125,8 +161,9 @@ defmodule RicqchetWeb.PublishControllerTest do
       # First message to api1
       conn1 =
         conn
+        |> put_req_header("ricqchet-destination", "https://example.com/api1")
         |> put_req_header("ricqchet-batch-key", "events")
-        |> post("/v1/publish/https://example.com/api1", ~s({"event": "first"}))
+        |> post("/v1/publish", ~s({"event": "first"}))
 
       response1 = json_response(conn1, 202)
       msg1 = Messages.get!(response1["message_id"])
@@ -141,8 +178,9 @@ defmodule RicqchetWeb.PublishControllerTest do
         build_conn()
         |> put_req_header("authorization", auth_header)
         |> put_req_header("content-type", "application/json")
+        |> put_req_header("ricqchet-destination", "https://example.com/api2")
         |> put_req_header("ricqchet-batch-key", "events")
-        |> post("/v1/publish/https://example.com/api2", ~s({"event": "second"}))
+        |> post("/v1/publish", ~s({"event": "second"}))
 
       response2 = json_response(conn2, 202)
       msg2 = Messages.get!(response2["message_id"])
@@ -154,9 +192,10 @@ defmodule RicqchetWeb.PublishControllerTest do
     test "forwards headers to batch", %{conn: conn} do
       conn =
         conn
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
         |> put_req_header("ricqchet-batch-key", "order-events")
         |> put_req_header("ricqchet-forward-x-custom", "custom-value")
-        |> post("/v1/publish/https://example.com/api", ~s({"event": "test"}))
+        |> post("/v1/publish", ~s({"event": "test"}))
 
       response = json_response(conn, 202)
       message = Messages.get!(response["message_id"])
