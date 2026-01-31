@@ -31,7 +31,9 @@ defmodule RicqchetWeb.PublishController do
           in: :path,
           type: :string,
           required: true,
-          description: "Full destination URL including scheme (e.g., https://example.com/webhook)"
+          description:
+            "Full destination URL including scheme (e.g., https://example.com/webhook). " <>
+              "This is a wildcard path parameter that captures all segments after /v1/publish/."
         ]
       ] ++ Schemas.PublishHeaders.parameters(),
     request_body:

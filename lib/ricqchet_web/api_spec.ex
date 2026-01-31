@@ -48,9 +48,7 @@ defmodule RicqchetWeb.ApiSpec do
         URL with the prefix stripped.
         """
       },
-      servers: [
-        %Server{url: "http://localhost:4000", description: "Development"}
-      ],
+      servers: servers(),
       paths: Paths.from_router(Router),
       components: %Components{
         securitySchemes: %{
@@ -65,5 +63,11 @@ defmodule RicqchetWeb.ApiSpec do
     }
 
     OpenApiSpex.resolve_schema_modules(spec)
+  end
+
+  defp servers do
+    base_url = System.get_env("RICQCHET_API_BASE_URL", "http://localhost:4000")
+
+    [%Server{url: base_url, description: "API Server"}]
   end
 end
