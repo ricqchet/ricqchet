@@ -69,8 +69,8 @@ defmodule Relay.Delivery.BatchWorkerTest do
     test "marks batch as failed with retry on error", %{batch: batch} do
       {:ok, updated_batch} = Batches.mark_failed(batch, "Connection refused")
 
-      # First failure should schedule retry
-      assert updated_batch.status == "collecting"
+      # First failure should schedule retry with "pending" status
+      assert updated_batch.status == "pending"
       assert updated_batch.attempts == 1
       assert updated_batch.last_error == "Connection refused"
     end

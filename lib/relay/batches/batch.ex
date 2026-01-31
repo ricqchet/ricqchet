@@ -12,7 +12,12 @@ defmodule Relay.Batches.Batch do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @statuses ~w(collecting dispatched delivered failed)
+  # collecting: accepting new messages
+  # pending: ready for dispatch (size reached, timeout, or retry)
+  # dispatched: claimed for delivery, in flight
+  # delivered: successfully delivered
+  # failed: permanently failed (max retries exceeded)
+  @statuses ~w(collecting pending dispatched delivered failed)
 
   schema "batches" do
     field :batch_key, :string

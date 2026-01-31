@@ -11,6 +11,14 @@ defmodule Relay.BatchDispatcher do
 
   This design allows horizontal scaling - multiple instances can safely
   poll for batches using PostgreSQL's `FOR UPDATE SKIP LOCKED`.
+
+  ## Configuration
+
+  Configure in your application config:
+
+      config :relay, Relay.BatchDispatcher,
+        poll_interval_ms: 100,
+        max_batches_per_cycle: 50
   """
 
   use GenServer
@@ -20,7 +28,8 @@ defmodule Relay.BatchDispatcher do
   alias Relay.Batches
   alias Relay.Delivery.BatchWorker
 
-  @poll_interval_ms 100
+  @default_poll_interval_ms 100
+  @default_max_batches_per_cycle 50
 
   # Client API
 
@@ -38,7 +47,7 @@ defmodule Relay.BatchDispatcher do
 
   @impl GenServer
   def handle_info(:poll, state) do
-    dispatch_ready_batches()
+    dispatch_ready_batches(max_batches_per_cycle())
     schedule_poll()
     {:noreply, state}
   end
@@ -46,15 +55,16 @@ defmodule Relay.BatchDispatcher do
   # Private functions
 
   defp schedule_poll do
-    Process.send_after(self(), :poll, @poll_interval_ms)
+    Process.send_after(self(), :poll, poll_interval_ms())
   end
 
-  defp dispatch_ready_batches do
+  defp dispatch_ready_batches(0), do: :ok
+
+  defp dispatch_ready_batches(remaining) do
     case Batches.claim_next_ready() do
       {:ok, batch} ->
         enqueue_batch_delivery(batch)
-        # Try to dispatch more batches
-        dispatch_ready_batches()
+        dispatch_ready_batches(remaining - 1)
 
       {:error, :none_available} ->
         :ok
@@ -71,5 +81,15 @@ defmodule Relay.BatchDispatcher do
       {:error, reason} ->
         Logger.error("Failed to enqueue batch delivery for batch #{batch.id}: #{inspect(reason)}")
     end
+  end
+
+  defp poll_interval_ms do
+    config = Application.get_env(:relay, __MODULE__, [])
+    Keyword.get(config, :poll_interval_ms, @default_poll_interval_ms)
+  end
+
+  defp max_batches_per_cycle do
+    config = Application.get_env(:relay, __MODULE__, [])
+    Keyword.get(config, :max_batches_per_cycle, @default_max_batches_per_cycle)
   end
 end

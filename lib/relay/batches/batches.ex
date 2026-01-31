@@ -118,18 +118,22 @@ defmodule Relay.Batches do
   Claims the next batch ready for dispatch.
 
   A batch is ready when:
-  - status is "collecting" AND
-  - (message_count >= max_size OR scheduled_at <= now)
+  - status is "pending" (waiting for retry), OR
+  - status is "collecting" AND (message_count >= max_size OR scheduled_at <= now)
 
   Uses `FOR UPDATE SKIP LOCKED` for safe concurrent access.
   """
   def claim_next_ready do
     now = DateTime.utc_now()
 
+    # Batches in "pending" are always ready (waiting for retry)
+    # Batches in "collecting" are ready when size reached or timeout
     query =
       from b in Batch,
-        where: b.status == "collecting",
-        where: b.message_count >= b.max_size or b.scheduled_at <= ^now,
+        where:
+          b.status == "pending" or
+            (b.status == "collecting" and
+               (b.message_count >= b.max_size or b.scheduled_at <= ^now)),
         order_by: [asc: b.scheduled_at, asc: b.inserted_at],
         limit: 1,
         lock: "FOR UPDATE SKIP LOCKED"
@@ -232,7 +236,9 @@ defmodule Relay.Batches do
       Map.merge(base, %{status: "failed", completed_at: now})
     else
       backoff = DateTime.add(now, backoff_seconds(attempts), :second)
-      Map.merge(base, %{status: "collecting", scheduled_at: backoff})
+      # Use "pending" status instead of "collecting" for retry clarity
+      # "collecting" means accepting new messages, "pending" means awaiting dispatch
+      Map.merge(base, %{status: "pending", scheduled_at: backoff})
     end
   end
 
