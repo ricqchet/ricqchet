@@ -35,7 +35,7 @@ defmodule Ricqchet.Delivery.Signer do
       "t=1706745600,v1=abc123..."
 
   """
-  @spec sign(binary(), binary(), integer()) :: String.t()
+  @spec sign(binary(), binary(), integer() | nil) :: String.t()
   def sign(payload, signing_secret, timestamp \\ nil) do
     timestamp = timestamp || System.system_time(:second)
     signed_payload = "#{timestamp}.#{payload}"
