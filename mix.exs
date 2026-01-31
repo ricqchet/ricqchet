@@ -64,6 +64,9 @@ defmodule Ricqchet.MixProject do
       # Auth
       {:argon2_elixir, "~> 4.0"},
 
+      # API Documentation
+      {:open_api_spex, "~> 3.21"},
+
       # Dev/Test tooling
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},

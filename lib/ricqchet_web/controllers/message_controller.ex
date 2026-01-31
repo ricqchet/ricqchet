@@ -4,10 +4,48 @@ defmodule RicqchetWeb.MessageController do
   """
 
   use RicqchetWeb, :controller
+  use OpenApiSpex.ControllerSpecs
 
+  alias OpenApiSpex.Schema
   alias Ricqchet.Messages
+  alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
+
+  tags(["messages"])
+
+  operation(:show,
+    summary: "Get message status",
+    description: "Retrieves the current status and details of a message.",
+    parameters: [
+      id: [
+        in: :path,
+        schema: %Schema{type: :string, format: :uuid},
+        required: true,
+        description: "Message ID"
+      ]
+    ],
+    responses: Schemas.Helpers.show_responses(Schemas.Message),
+    security: [%{"bearer_auth" => []}]
+  )
+
+  operation(:delete,
+    summary: "Cancel a message",
+    description: """
+    Cancels a pending message. Returns 409 Conflict if the message has already
+    been dispatched or completed.
+    """,
+    parameters: [
+      id: [
+        in: :path,
+        schema: %Schema{type: :string, format: :uuid},
+        required: true,
+        description: "Message ID"
+      ]
+    ],
+    responses: Schemas.Helpers.delete_responses(Schemas.CancelledResponse),
+    security: [%{"bearer_auth" => []}]
+  )
 
   @doc """
   Gets the status and details of a message.

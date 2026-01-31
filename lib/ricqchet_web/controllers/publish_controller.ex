@@ -4,11 +4,46 @@ defmodule RicqchetWeb.PublishController do
   """
 
   use RicqchetWeb, :controller
+  use OpenApiSpex.ControllerSpecs
 
+  alias OpenApiSpex.Schema
   alias Ricqchet.BatchCollector
   alias Ricqchet.Messages
+  alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
+
+  tags(["messages"])
+
+  operation(:create,
+    summary: "Publish a message",
+    description: """
+    Publishes a message to be delivered to the destination URL.
+
+    The destination URL is captured from the wildcard path. Various `Ricqchet-*` headers
+    control message behavior including delays, deduplication, retries, and batching.
+
+    #{Schemas.PublishHeaders.forward_header_description()}
+    """,
+    parameters:
+      [
+        destination_url: [
+          in: :path,
+          type: :string,
+          required: true,
+          description: "Full destination URL including scheme (e.g., https://example.com/webhook)"
+        ]
+      ] ++ Schemas.PublishHeaders.parameters(),
+    request_body:
+      {"Message payload", "application/json",
+       %Schema{
+         type: :object,
+         additionalProperties: true,
+         description: "The payload to deliver to the destination URL"
+       }, required: false},
+    responses: Schemas.Helpers.create_responses(Schemas.PublishResponse),
+    security: [%{"bearer_auth" => []}]
+  )
 
   @doc """
   Publishes a message to be delivered to the destination URL.
