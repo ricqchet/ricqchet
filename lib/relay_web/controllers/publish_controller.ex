@@ -97,18 +97,35 @@ defmodule RelayWeb.PublishController do
     end
   end
 
+  # Maximum batch size to prevent memory issues
+  @max_batch_size 1000
+  # Maximum batch timeout (1 hour)
+  @max_batch_timeout 3600
+
   defp get_batch_size(conn) do
-    case get_req_header(conn, "relay-batch-size") do
-      [size | _] -> parse_integer(size, 10)
-      [] -> 10
-    end
+    size =
+      case get_req_header(conn, "relay-batch-size") do
+        [size | _] -> parse_integer(size, 10)
+        [] -> 10
+      end
+
+    # Clamp to valid range: 1 to @max_batch_size
+    size
+    |> max(1)
+    |> min(@max_batch_size)
   end
 
   defp get_batch_timeout(conn) do
-    case get_req_header(conn, "relay-batch-timeout") do
-      [timeout | _] -> parse_integer(timeout, 5)
-      [] -> 5
-    end
+    timeout =
+      case get_req_header(conn, "relay-batch-timeout") do
+        [timeout | _] -> parse_integer(timeout, 5)
+        [] -> 5
+      end
+
+    # Clamp to valid range: 1 to @max_batch_timeout
+    timeout
+    |> max(1)
+    |> min(@max_batch_timeout)
   end
 
   defp build_destination_url(parts) when is_list(parts) do
@@ -132,11 +149,23 @@ defmodule RelayWeb.PublishController do
   defp put_payload(attrs, conn) do
     case conn.body_params do
       %Plug.Conn.Unfetched{} ->
-        {:ok, body, _conn} = Plug.Conn.read_body(conn)
-        Map.put(attrs, :payload, body)
+        case Plug.Conn.read_body(conn) do
+          {:ok, body, _conn} ->
+            Map.put(attrs, :payload, body)
+
+          {:more, _partial, _conn} ->
+            # Body too large (shouldn't happen with endpoint limit)
+            Map.put(attrs, :payload, nil)
+
+          {:error, _reason} ->
+            Map.put(attrs, :payload, nil)
+        end
 
       body when is_map(body) ->
-        Map.put(attrs, :payload, Jason.encode!(body))
+        case Jason.encode(body) do
+          {:ok, encoded} -> Map.put(attrs, :payload, encoded)
+          {:error, _} -> Map.put(attrs, :payload, nil)
+        end
     end
   end
 

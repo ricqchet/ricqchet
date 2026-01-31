@@ -74,6 +74,8 @@ defmodule Relay.Dispatcher do
 
       {:error, reason} ->
         Logger.error("Failed to enqueue delivery for message #{message.id}: #{inspect(reason)}")
+        # Revert status to prevent message from being stuck in "dispatched" forever
+        Messages.revert_to_pending(message)
     end
   end
 

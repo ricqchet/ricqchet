@@ -69,13 +69,19 @@ defmodule Relay.Messages do
 
   @doc """
   Gets an existing message by dedup_key for a tenant.
-  Only returns messages that are pending or dispatched.
+
+  Only returns messages that are:
+  - pending or dispatched status
+  - within their dedup TTL window (dedup_expires_at > now)
   """
   def get_by_dedup_key(%Tenant{id: tenant_id}, dedup_key) when is_binary(dedup_key) do
+    now = DateTime.utc_now()
+
     Message
     |> where([m], m.tenant_id == ^tenant_id)
     |> where([m], m.dedup_key == ^dedup_key)
     |> where([m], m.status in ["pending", "dispatched"])
+    |> where([m], m.dedup_expires_at > ^now)
     |> Repo.one()
   end
 
@@ -176,4 +182,21 @@ defmodule Relay.Messages do
   end
 
   def cancel(%Message{}), do: {:error, :already_dispatched}
+
+  @doc """
+  Reverts a dispatched message back to pending status.
+
+  Used when job queue insertion fails to prevent messages from being
+  stuck in "dispatched" status forever.
+  """
+  def revert_to_pending(%Message{status: "dispatched"} = message) do
+    message
+    |> Message.changeset(%{
+      status: "pending",
+      dispatched_at: nil
+    })
+    |> Repo.update()
+  end
+
+  def revert_to_pending(%Message{} = message), do: {:ok, message}
 end
