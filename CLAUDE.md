@@ -13,17 +13,18 @@ mix precommit          # Pre-commit checks (see below)
 
 ## Before Committing
 
-Run all quality checks before committing:
+Use the precommit alias to run all quality checks:
 
 ```bash
-mix compile --warnings-as-errors  # No compiler warnings
-mix format --check-formatted      # Code formatting
-mix credo --strict                # Static analysis
-mix dialyzer                      # Type checking
-mix test                          # All tests pass
+mix precommit
 ```
 
-Or use the alias: `mix precommit` (runs all of the above)
+This runs:
+- `compile --warnings-as-errors` - No compiler warnings
+- `format` - Auto-format code
+- `credo --strict` - Static analysis
+- `dialyzer` - Type checking
+- `test` - All tests pass
 
 ## Commit Conventions
 
