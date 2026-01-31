@@ -1,6 +1,6 @@
 # @ricqchet/client
 
-TypeScript client for [Ricqchet](https://github.com/doomspork/tacoma) HTTP message queue service.
+TypeScript client for [Ricqchet](https://github.com/doomspork/ricqchet) HTTP message queue service.
 
 ## Installation
 
