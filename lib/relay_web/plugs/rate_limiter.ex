@@ -53,7 +53,10 @@ defmodule RelayWeb.Plugs.RateLimiter do
   defp reject_request(conn) do
     conn
     |> put_resp_header("retry-after", "1")
-    |> send_resp(429, Jason.encode!(%{error: "rate_limit_exceeded", message: "Too many requests"}))
+    |> send_resp(
+      429,
+      Jason.encode!(%{error: "rate_limit_exceeded", message: "Too many requests"})
+    )
     |> halt()
   end
 
