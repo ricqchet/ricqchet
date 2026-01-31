@@ -78,7 +78,8 @@ Publishes a message to be delivered to the destination URL.
 
 | Header | Description | Example |
 |--------|-------------|---------|
-| `Ricqchet-Destination` | Destination URL (required) | `https://api.example.com/webhook` |
+| `Ricqchet-Destination` | Destination URL (required unless using fan-out) | `https://api.example.com/webhook` |
+| `Ricqchet-Fan-Out` | Comma-separated URLs for fan-out (max 100) | `https://api1.com, https://api2.com` |
 | `Ricqchet-Delay` | Delay before first attempt | `30s`, `5m`, `2h`, `1d` |
 | `Ricqchet-Dedup-Key` | Deduplication key | `order-123` |
 | `Ricqchet-Dedup-TTL` | Dedup window in seconds (default: 300) | `600` |
@@ -172,6 +173,39 @@ curl -X POST "http://localhost:4000/v1/publish" \
 - `Ricqchet-Batch-Size`: 1 to 1000 messages (default: 10)
 - `Ricqchet-Batch-Timeout`: 1 to 3600 seconds (default: 5)
 - Batched messages share the same retry behavior - if delivery fails, the entire batch is retried
+
+### Fan-out
+
+Use the `Ricqchet-Fan-Out` header to broadcast the same message to multiple destinations with a single API call. This creates separate messages for each destination, each with its own delivery tracking.
+
+**Example:**
+
+```bash
+curl -X POST "http://localhost:4000/v1/publish" \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -H "Ricqchet-Fan-Out: https://api1.example.com/webhook, https://api2.example.com/webhook, https://api3.example.com/webhook" \
+  -d '{"event": "order.created", "data": {"id": 123}}'
+```
+
+**Response (202 Accepted):**
+
+```json
+{
+  "message_ids": [
+    "550e8400-e29b-41d4-a716-446655440000",
+    "550e8400-e29b-41d4-a716-446655440001",
+    "550e8400-e29b-41d4-a716-446655440002"
+  ]
+}
+```
+
+**Fan-out constraints:**
+
+- Maximum 100 destinations per request
+- Cannot be combined with `Ricqchet-Destination` (use one or the other)
+- Cannot be combined with batching (`Ricqchet-Batch-Key`)
+- Each destination gets its own message with independent retry behavior
 
 ### Get Message Status
 

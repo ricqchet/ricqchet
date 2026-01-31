@@ -13,6 +13,9 @@ defmodule RicqchetWeb.PublishController do
 
   action_fallback RicqchetWeb.FallbackController
 
+  # Maximum number of destinations for fan-out
+  @max_fan_out_destinations 100
+
   tags(["messages"])
 
   operation(:create,
@@ -20,9 +23,15 @@ defmodule RicqchetWeb.PublishController do
     description: """
     Publishes a message to be delivered to the destination URL.
 
-    The destination URL is specified in the `Ricqchet-Destination` header. Various other
-    `Ricqchet-*` headers control message behavior including delays, deduplication, retries,
-    and batching.
+    The destination URL is specified in the `Ricqchet-Destination` header. For fan-out
+    delivery to multiple destinations, use `Ricqchet-Fan-Out` with a comma-separated list
+    of URLs instead. Various other `Ricqchet-*` headers control message behavior including
+    delays, deduplication, retries, and batching.
+
+    **Fan-out notes:**
+    - Creates a separate message for each destination (up to 100)
+    - Returns an array of message IDs
+    - Cannot be combined with batching
 
     #{Schemas.PublishHeaders.forward_header_description()}
     """,
@@ -42,9 +51,11 @@ defmodule RicqchetWeb.PublishController do
   Publishes a message to be delivered to the destination URL.
 
   The destination URL is specified in the `Ricqchet-Destination` header.
+  For fan-out to multiple destinations, use the `Ricqchet-Fan-Out` header.
   Various Ricqchet-* headers control message behavior:
 
-  - `Ricqchet-Destination`: Full destination URL (required)
+  - `Ricqchet-Destination`: Full destination URL (required, unless using fan-out)
+  - `Ricqchet-Fan-Out`: Comma-separated list of destination URLs for fan-out
   - `Ricqchet-Delay`: Delay before first attempt (e.g., "30s", "5m", "2h", "1d")
   - `Ricqchet-Dedup-Key`: Deduplication key
   - `Ricqchet-Dedup-TTL`: Dedup window in seconds (default: 300)
@@ -57,8 +68,8 @@ defmodule RicqchetWeb.PublishController do
   def create(conn, _params) do
     tenant = conn.assigns.current_tenant
 
-    case get_destination_url(conn) do
-      {:ok, destination_url} ->
+    case get_destinations(conn) do
+      {:ok, :single, destination_url} ->
         case get_batch_key(conn) do
           nil ->
             create_individual_message(conn, tenant, destination_url)
@@ -67,21 +78,68 @@ defmodule RicqchetWeb.PublishController do
             create_batched_message(conn, tenant, destination_url, batch_key)
         end
 
+      {:ok, :fan_out, destination_urls} ->
+        # Fan-out is incompatible with batching
+        case get_batch_key(conn) do
+          nil ->
+            create_fan_out_messages(conn, tenant, destination_urls)
+
+          _batch_key ->
+            {:error, :validation, "Ricqchet-Fan-Out cannot be used with Ricqchet-Batch-Key"}
+        end
+
       {:error, reason} ->
         {:error, :validation, reason}
     end
   end
 
-  defp get_destination_url(conn) do
-    case get_req_header(conn, "ricqchet-destination") do
-      [url | _] ->
+  defp get_destinations(conn) do
+    single = get_req_header(conn, "ricqchet-destination")
+    fan_out = get_req_header(conn, "ricqchet-fan-out")
+
+    case {single, fan_out} do
+      {[_url | _], [_urls | _]} ->
+        {:error, "Cannot use both Ricqchet-Destination and Ricqchet-Fan-Out headers"}
+
+      {[url | _], []} ->
         case Ricqchet.UrlValidator.validate_url(url) do
-          :ok -> {:ok, url}
+          :ok -> {:ok, :single, url}
           {:error, reason} -> {:error, "destination_url: #{reason}"}
         end
 
-      [] ->
-        {:error, "Ricqchet-Destination header is required"}
+      {[], [urls | _]} ->
+        parse_fan_out_urls(urls)
+
+      {[], []} ->
+        {:error, "Ricqchet-Destination or Ricqchet-Fan-Out header is required"}
+    end
+  end
+
+  defp parse_fan_out_urls(urls_string) do
+    urls =
+      urls_string
+      |> String.split(",")
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+
+    cond do
+      urls == [] ->
+        {:error, "Ricqchet-Fan-Out header cannot be empty"}
+
+      length(urls) > @max_fan_out_destinations ->
+        {:error, "Ricqchet-Fan-Out exceeds maximum of #{@max_fan_out_destinations} destinations"}
+
+      true ->
+        validate_fan_out_urls(urls, [])
+    end
+  end
+
+  defp validate_fan_out_urls([], validated), do: {:ok, :fan_out, Enum.reverse(validated)}
+
+  defp validate_fan_out_urls([url | rest], validated) do
+    case Ricqchet.UrlValidator.validate_url(url) do
+      :ok -> validate_fan_out_urls(rest, [url | validated])
+      {:error, reason} -> {:error, "Invalid fan-out URL '#{url}': #{reason}"}
     end
   end
 
@@ -110,6 +168,42 @@ defmodule RicqchetWeb.PublishController do
           {:error, changeset} ->
             {:error, changeset}
         end
+    end
+  end
+
+  defp create_fan_out_messages(conn, tenant, destination_urls) do
+    # Build base attributes (same for all destinations)
+    base_attrs =
+      %{}
+      |> put_payload(conn)
+      |> put_content_type(conn)
+      |> put_delay(conn)
+      |> put_max_retries(conn)
+      |> put_forwarded_headers(conn)
+
+    # Note: dedup is intentionally not used with fan-out since each destination
+    # should be treated as a separate message
+
+    # Create a message for each destination
+    results =
+      Enum.map(destination_urls, fn url ->
+        attrs = Map.put(base_attrs, :destination_url, url)
+        Messages.create(tenant, attrs)
+      end)
+
+    # Check if all succeeded
+    case Enum.split_with(results, &match?({:ok, _}, &1)) do
+      {successes, []} ->
+        messages = Enum.map(successes, fn {:ok, msg} -> msg end)
+
+        conn
+        |> put_status(:accepted)
+        |> render(:fan_out_created, messages: messages)
+
+      {_successes, [{:error, changeset} | _]} ->
+        # If any failed, return the first error
+        # In a production system, you might want to handle partial failures differently
+        {:error, changeset}
     end
   end
 
