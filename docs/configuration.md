@@ -35,24 +35,32 @@ plugins: [
 
 ## Dispatcher
 
-The dispatcher polls for pending messages. Configure in your application:
+The dispatcher polls for pending messages and enqueues them for delivery. Configure via application config:
 
 ```elixir
-# lib/ricqchet/application.ex
-children = [
-  # ... other children
-  {Ricqchet.Dispatcher, poll_interval: 100}  # milliseconds
-]
+# config/config.exs
+config :ricqchet, Ricqchet.Dispatcher,
+  poll_interval_ms: 100,        # milliseconds between polls (default: 100)
+  max_messages_per_cycle: 100   # max messages to claim per poll cycle (default: 100)
+
+# To disable the dispatcher (e.g., in tests)
+config :ricqchet, :dispatcher_enabled, false
 ```
 
-Default poll interval is 100ms. Increase for lower CPU usage, decrease for faster dispatch.
+Increase `poll_interval_ms` for lower CPU usage, decrease for faster dispatch.
 
 ## Batch Dispatcher
 
-Similar to the message dispatcher, but for batches:
+The batch dispatcher polls for ready batches and enqueues them for delivery:
 
 ```elixir
-{Ricqchet.BatchDispatcher, poll_interval: 100}
+# config/config.exs
+config :ricqchet, Ricqchet.BatchDispatcher,
+  poll_interval_ms: 100,        # milliseconds between polls (default: 100)
+  max_batches_per_cycle: 50     # max batches to claim per poll cycle (default: 50)
+
+# To disable the batch dispatcher
+config :ricqchet, :batch_dispatcher_enabled, false
 ```
 
 ## Database
