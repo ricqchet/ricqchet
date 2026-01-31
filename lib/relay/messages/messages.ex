@@ -32,6 +32,21 @@ defmodule Relay.Messages do
   end
 
   @doc """
+  Creates a new message associated with a batch.
+
+  The message status is set to "pending" but it won't be picked up by the
+  regular dispatcher since it has a batch_id. It will be delivered when
+  the batch is dispatched.
+  """
+  def create_for_batch(%Tenant{} = tenant, batch, attrs) do
+    attrs = Map.put(attrs, :batch_id, batch.id)
+
+    %Message{}
+    |> Message.create_changeset(tenant, attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
   Gets a message by ID.
   """
   def get(id), do: Repo.get(Message, id)
@@ -81,6 +96,7 @@ defmodule Relay.Messages do
       from m in Message,
         where: m.status == "pending",
         where: m.scheduled_at <= ^now,
+        where: is_nil(m.batch_id),
         order_by: [asc: m.scheduled_at, asc: m.inserted_at],
         limit: 1,
         lock: "FOR UPDATE SKIP LOCKED"

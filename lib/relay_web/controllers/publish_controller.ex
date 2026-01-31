@@ -5,6 +5,7 @@ defmodule RelayWeb.PublishController do
 
   use RelayWeb, :controller
 
+  alias Relay.BatchCollector
   alias Relay.Messages
 
   action_fallback RelayWeb.FallbackController
@@ -20,11 +21,24 @@ defmodule RelayWeb.PublishController do
   - `Relay-Dedup-TTL`: Dedup window in seconds (default: 300)
   - `Relay-Retries`: Override max retries
   - `Relay-Forward-*`: Headers to forward to destination (prefix stripped)
+  - `Relay-Batch-Key`: Group messages into a batch (opt-in batching)
+  - `Relay-Batch-Size`: Max messages per batch (default: 10)
+  - `Relay-Batch-Timeout`: Seconds before batch is sent (default: 5)
   """
   def create(conn, %{"destination_url" => destination_parts}) do
     tenant = conn.assigns.current_tenant
     destination_url = build_destination_url(destination_parts)
 
+    case get_batch_key(conn) do
+      nil ->
+        create_individual_message(conn, tenant, destination_url)
+
+      batch_key ->
+        create_batched_message(conn, tenant, destination_url, batch_key)
+    end
+  end
+
+  defp create_individual_message(conn, tenant, destination_url) do
     attrs =
       %{destination_url: destination_url}
       |> put_payload(conn)
@@ -52,8 +66,67 @@ defmodule RelayWeb.PublishController do
     end
   end
 
+  defp create_batched_message(conn, tenant, destination_url, batch_key) do
+    message_attrs =
+      %{destination_url: destination_url}
+      |> put_payload(conn)
+      |> put_content_type(conn)
+      |> put_forwarded_headers(conn)
+
+    batch_opts = %{
+      max_size: get_batch_size(conn),
+      timeout_seconds: get_batch_timeout(conn),
+      headers: Map.get(message_attrs, :headers, %{})
+    }
+
+    case BatchCollector.add_message(tenant, batch_key, destination_url, message_attrs, batch_opts) do
+      {:ok, message} ->
+        conn
+        |> put_status(:accepted)
+        |> render(:created, message: message)
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  defp get_batch_key(conn) do
+    case get_req_header(conn, "relay-batch-key") do
+      [key | _] -> key
+      [] -> nil
+    end
+  end
+
+  defp get_batch_size(conn) do
+    case get_req_header(conn, "relay-batch-size") do
+      [size | _] -> parse_integer(size, 10)
+      [] -> 10
+    end
+  end
+
+  defp get_batch_timeout(conn) do
+    case get_req_header(conn, "relay-batch-timeout") do
+      [timeout | _] -> parse_integer(timeout, 5)
+      [] -> 5
+    end
+  end
+
   defp build_destination_url(parts) when is_list(parts) do
-    Enum.join(parts, "/")
+    # Phoenix collapses consecutive slashes in wildcard routes, so we need to
+    # reconstruct the URL properly. e.g., ["https:", "example.com", "api"] -> "https://example.com/api"
+    case parts do
+      [scheme, host | rest] when scheme in ["http:", "https:"] ->
+        path = Enum.join(rest, "/")
+
+        if path == "" do
+          "#{scheme}//#{host}"
+        else
+          "#{scheme}//#{host}/#{path}"
+        end
+
+      _ ->
+        Enum.join(parts, "/")
+    end
   end
 
   defp put_payload(attrs, conn) do
@@ -64,9 +137,6 @@ defmodule RelayWeb.PublishController do
 
       body when is_map(body) ->
         Map.put(attrs, :payload, Jason.encode!(body))
-
-      body ->
-        Map.put(attrs, :payload, body)
     end
   end
 
