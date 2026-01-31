@@ -3,8 +3,11 @@ defmodule RicqchetWeb.Plugs.Authenticate do
   Plug for authenticating API requests using Bearer tokens.
 
   Extracts the API key from the Authorization header and looks up the
-  corresponding tenant. If authentication succeeds, the tenant is assigned
-  to `conn.assigns.current_tenant`.
+  corresponding tenant and application. If authentication succeeds,
+  assigns are set for:
+  - `current_tenant` - the tenant owning the application
+  - `current_application` - the application the API key belongs to
+  - `current_api_key` - the API key record used for authentication
 
   ## Usage
 
@@ -14,7 +17,7 @@ defmodule RicqchetWeb.Plugs.Authenticate do
 
   import Plug.Conn
 
-  alias Ricqchet.Tenants
+  alias Ricqchet.ApiKeys
 
   @behaviour Plug
 
@@ -24,8 +27,12 @@ defmodule RicqchetWeb.Plugs.Authenticate do
   @impl Plug
   def call(conn, _opts) do
     with {:ok, api_key} <- extract_api_key(conn),
-         %{} = tenant <- Tenants.get_by_api_key(api_key) do
-      assign(conn, :current_tenant, tenant)
+         %{tenant: tenant, application: application, api_key: api_key_record} <-
+           ApiKeys.get_by_api_key(api_key) do
+      conn
+      |> assign(:current_tenant, tenant)
+      |> assign(:current_application, application)
+      |> assign(:current_api_key, api_key_record)
     else
       _ -> unauthorized(conn)
     end
