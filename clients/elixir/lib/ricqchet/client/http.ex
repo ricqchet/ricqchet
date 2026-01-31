@@ -1,13 +1,12 @@
 defmodule Ricqchet.Client.HTTP do
   @moduledoc false
+  @behaviour Ricqchet.Client.Adapter
 
   # Internal HTTP client for Ricqchet operations.
 
   alias Ricqchet.Error
 
-  @doc """
-  Publishes a message to a destination.
-  """
+  @impl true
   def publish(config, destination, payload, opts) do
     headers = build_publish_headers(destination, opts)
     body = encode_payload(payload)
@@ -24,9 +23,7 @@ defmodule Ricqchet.Client.HTTP do
     end
   end
 
-  @doc """
-  Publishes a message to multiple destinations (fan-out).
-  """
+  @impl true
   def publish_fan_out(config, destinations, payload, opts) do
     fan_out_header = Enum.join(destinations, ", ")
     headers = [{"ricqchet-fan-out", fan_out_header}] ++ build_common_headers(opts)
@@ -44,9 +41,7 @@ defmodule Ricqchet.Client.HTTP do
     end
   end
 
-  @doc """
-  Gets message status.
-  """
+  @impl true
   def get_message(config, message_id) do
     case request(:get, config, "/v1/messages/#{message_id}", [], nil) do
       {:ok, %{status: 200, body: body}} ->
@@ -63,9 +58,7 @@ defmodule Ricqchet.Client.HTTP do
     end
   end
 
-  @doc """
-  Cancels a pending message.
-  """
+  @impl true
   def cancel_message(config, message_id) do
     case request(:delete, config, "/v1/messages/#{message_id}", [], nil) do
       {:ok, %{status: 200, body: body}} ->
@@ -85,9 +78,7 @@ defmodule Ricqchet.Client.HTTP do
     end
   end
 
-  @doc """
-  Gets the signing secret.
-  """
+  @impl true
   def get_signing_secret(config) do
     case request(:get, config, "/v1/signing-secret", [], nil) do
       {:ok, %{status: 200, body: body}} ->

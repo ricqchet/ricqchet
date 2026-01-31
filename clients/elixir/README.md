@@ -124,6 +124,128 @@ Ricqchet.Verification.verify_payload(
 )
 ```
 
+## Testing
+
+The library includes test helpers for testing code that uses Ricqchet clients.
+
+### Setup
+
+Configure the test adapter in `config/test.exs`:
+
+```elixir
+config :ricqchet, adapter: Ricqchet.Adapters.Test
+```
+
+### Assertions
+
+Use `Ricqchet.Testing` for a clean assertion API:
+
+```elixir
+defmodule MyApp.QueueTest do
+  use ExUnit.Case, async: true
+  import Ricqchet.Testing
+
+  test "publishes order created event" do
+    {:ok, %{message_id: id}} = MyApp.Queue.publish(%{event: "order.created", id: 123})
+
+    assert is_binary(id)
+    assert_published destination: "https://myapp.com/webhook",
+                     payload: %{event: "order.created", id: 123}
+  end
+
+  test "publishes with delay option" do
+    MyApp.Queue.publish(%{event: "reminder"}, delay: "1h")
+
+    assert_published delay: "1h"
+  end
+
+  test "refutes publish when nothing sent" do
+    refute_published()
+  end
+
+  test "fan-out to multiple destinations" do
+    dests = ["https://a.example.com", "https://b.example.com"]
+    {:ok, _} = MyApp.Queue.publish_fan_out(dests, %{event: "broadcast"})
+
+    assert_fan_out dests
+  end
+end
+```
+
+### Stubbing Responses
+
+Control adapter responses for error handling tests:
+
+```elixir
+test "handles rate limiting" do
+  stub_response(:publish, {:error, %Ricqchet.Error{type: :rate_limited}})
+
+  assert {:error, %{type: :rate_limited}} = MyApp.Queue.publish(%{event: "test"})
+end
+
+test "handles not found" do
+  stub_response(:get_message, {:error, :not_found}, message_id: "nonexistent")
+
+  assert {:error, :not_found} = MyApp.Queue.get_message("nonexistent")
+end
+```
+
+### Testing GenServers and Spawned Processes
+
+For integration tests with spawned processes, use global mode:
+
+```elixir
+defmodule MyApp.WorkerTest do
+  use ExUnit.Case, async: false  # Must be false for global mode
+  import Ricqchet.Testing
+
+  setup do
+    set_ricqchet_global()
+    :ok
+  end
+
+  test "worker publishes on tick" do
+    {:ok, worker} = MyApp.Worker.start_link()
+
+    send(worker, :tick)
+
+    assert_published destination: "https://example.com"
+  end
+end
+```
+
+### Using Mox (Advanced)
+
+For explicit mock expectations, use Mox with the adapter behaviour:
+
+```elixir
+# In test/test_helper.exs
+Mox.defmock(Ricqchet.MockAdapter, for: Ricqchet.Client.Adapter)
+
+# In config/test.exs
+config :ricqchet, adapter: Ricqchet.MockAdapter
+
+# In your test
+defmodule MyApp.QueueMoxTest do
+  use ExUnit.Case, async: true
+  import Mox
+
+  setup :verify_on_exit!
+
+  test "with explicit expectations" do
+    expect(Ricqchet.MockAdapter, :publish, fn _config, dest, payload, opts ->
+      assert dest == "https://myapp.com/webhook"
+      assert payload.event == "order.created"
+      assert opts[:delay] == "5m"
+      {:ok, %{message_id: "custom-id-123"}}
+    end)
+
+    assert {:ok, %{message_id: "custom-id-123"}} =
+             MyApp.Queue.publish(%{event: "order.created"}, delay: "5m")
+  end
+end
+```
+
 ## Configuration Options
 
 ### Client Options
