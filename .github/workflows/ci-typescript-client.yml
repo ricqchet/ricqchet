@@ -1,0 +1,40 @@
+name: CI TypeScript Client
+
+on:
+  merge_group:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - 'clients/typescript/**'
+  push:
+    branches: [main]
+    paths:
+      - 'clients/typescript/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-typescript-client-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: clients/typescript
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'npm'
+          cache-dependency-path: clients/typescript/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run lint
+      - run: npm run format:check
