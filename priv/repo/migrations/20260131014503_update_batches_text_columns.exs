@@ -1,4 +1,4 @@
-defmodule Relay.Repo.Migrations.UpdateBatchesTextColumns do
+defmodule Ricqchet.Repo.Migrations.UpdateBatchesTextColumns do
   use Ecto.Migration
 
   def change do

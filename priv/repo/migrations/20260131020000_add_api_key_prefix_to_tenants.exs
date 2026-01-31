@@ -1,4 +1,4 @@
-defmodule Relay.Repo.Migrations.AddApiKeyPrefixToTenants do
+defmodule Ricqchet.Repo.Migrations.AddApiKeyPrefixToTenants do
   use Ecto.Migration
 
   def change do

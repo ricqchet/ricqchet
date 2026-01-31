@@ -1,4 +1,4 @@
-defmodule Relay.Repo.Migrations.UpdateBatchesDestinationUrl do
+defmodule Ricqchet.Repo.Migrations.UpdateBatchesDestinationUrl do
   use Ecto.Migration
 
   def change do
