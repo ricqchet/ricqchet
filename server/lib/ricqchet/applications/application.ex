@@ -16,9 +16,12 @@ defmodule Ricqchet.Applications.Application do
     field :name, :string
     field :description, :string
     field :status, :string, default: "active"
+    field :dlq_destination_url, :string
 
     belongs_to :tenant, Ricqchet.Tenants.Tenant
     has_many :api_keys, Ricqchet.ApiKeys.ApiKey
+    has_many :messages, Ricqchet.Messages.Message
+    has_many :batches, Ricqchet.Batches.Batch
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -26,7 +29,7 @@ defmodule Ricqchet.Applications.Application do
   @doc false
   def changeset(application, attrs) do
     application
-    |> cast(attrs, [:name, :description, :status])
+    |> cast(attrs, [:name, :description, :status, :dlq_destination_url])
     |> validate_required([:name])
     |> validate_inclusion(:status, ["active", "suspended"])
     |> foreign_key_constraint(:tenant_id)

@@ -67,22 +67,23 @@ defmodule RicqchetWeb.PublishController do
   """
   def create(conn, _params) do
     tenant = conn.assigns.current_tenant
+    application = conn.assigns.current_application
 
     case get_destinations(conn) do
       {:ok, :single, destination_url} ->
         case get_batch_key(conn) do
           nil ->
-            create_individual_message(conn, tenant, destination_url)
+            create_individual_message(conn, tenant, application, destination_url)
 
           batch_key ->
-            create_batched_message(conn, tenant, destination_url, batch_key)
+            create_batched_message(conn, tenant, application, destination_url, batch_key)
         end
 
       {:ok, :fan_out, destination_urls} ->
         # Fan-out is incompatible with batching
         case get_batch_key(conn) do
           nil ->
-            create_fan_out_messages(conn, tenant, destination_urls)
+            create_fan_out_messages(conn, tenant, application, destination_urls)
 
           _batch_key ->
             {:error, :validation, "Ricqchet-Fan-Out cannot be used with Ricqchet-Batch-Key"}
@@ -143,7 +144,7 @@ defmodule RicqchetWeb.PublishController do
     end
   end
 
-  defp create_individual_message(conn, tenant, destination_url) do
+  defp create_individual_message(conn, tenant, application, destination_url) do
     attrs =
       %{destination_url: destination_url}
       |> put_payload(conn)
@@ -159,7 +160,7 @@ defmodule RicqchetWeb.PublishController do
         {:error, :duplicate, existing_id}
 
       :ok ->
-        case Messages.create(tenant, attrs) do
+        case Messages.create(tenant, attrs, application) do
           {:ok, message} ->
             conn
             |> put_status(:accepted)
@@ -171,7 +172,7 @@ defmodule RicqchetWeb.PublishController do
     end
   end
 
-  defp create_fan_out_messages(conn, tenant, destination_urls) do
+  defp create_fan_out_messages(conn, tenant, application, destination_urls) do
     # Build base attributes (same for all destinations)
     base_attrs =
       %{}
@@ -188,7 +189,7 @@ defmodule RicqchetWeb.PublishController do
     results =
       Enum.map(destination_urls, fn url ->
         attrs = Map.put(base_attrs, :destination_url, url)
-        Messages.create(tenant, attrs)
+        Messages.create(tenant, attrs, application)
       end)
 
     # Check if all succeeded
@@ -207,7 +208,7 @@ defmodule RicqchetWeb.PublishController do
     end
   end
 
-  defp create_batched_message(conn, tenant, destination_url, batch_key) do
+  defp create_batched_message(conn, tenant, application, destination_url, batch_key) do
     message_attrs =
       %{destination_url: destination_url}
       |> put_payload(conn)
@@ -220,7 +221,14 @@ defmodule RicqchetWeb.PublishController do
       headers: Map.get(message_attrs, :headers, %{})
     }
 
-    case BatchCollector.add_message(tenant, batch_key, destination_url, message_attrs, batch_opts) do
+    case BatchCollector.add_message(
+           tenant,
+           batch_key,
+           destination_url,
+           message_attrs,
+           batch_opts,
+           application
+         ) do
       {:ok, message} ->
         conn
         |> put_status(:accepted)

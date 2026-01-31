@@ -41,6 +41,7 @@ defmodule Ricqchet.Batches.Batch do
     field :last_response_body, :string
 
     belongs_to :tenant, Ricqchet.Tenants.Tenant
+    belongs_to :application, Ricqchet.Applications.Application
     has_many :messages, Ricqchet.Messages.Message
 
     timestamps(type: :utc_datetime_usec)
@@ -66,7 +67,8 @@ defmodule Ricqchet.Batches.Batch do
       :last_error,
       :last_response_status,
       :last_response_body,
-      :tenant_id
+      :tenant_id,
+      :application_id
     ])
     |> validate_required([:batch_key, :destination_url, :tenant_id])
     |> validate_inclusion(:status, @statuses)

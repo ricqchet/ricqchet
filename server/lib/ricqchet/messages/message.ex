@@ -41,6 +41,7 @@ defmodule Ricqchet.Messages.Message do
     field :flow_control_key, :string
 
     belongs_to :tenant, Ricqchet.Tenants.Tenant
+    belongs_to :application, Ricqchet.Applications.Application
     belongs_to :batch, Ricqchet.Batches.Batch
 
     timestamps(type: :utc_datetime_usec)
@@ -68,6 +69,7 @@ defmodule Ricqchet.Messages.Message do
       :dedup_expires_at,
       :flow_control_key,
       :tenant_id,
+      :application_id,
       :batch_id
     ])
     |> validate_required([:destination_url, :scheduled_at, :flow_control_key, :tenant_id])

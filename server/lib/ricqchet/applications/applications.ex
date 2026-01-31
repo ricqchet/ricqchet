@@ -70,4 +70,12 @@ defmodule Ricqchet.Applications do
   def delete_application(%Application{} = application) do
     Repo.delete(application)
   end
+
+  @doc """
+  Gets the DLQ destination URL for an application.
+
+  Returns `nil` if not configured or the application doesn't exist.
+  """
+  def get_dlq_destination(%Application{dlq_destination_url: url}), do: url
+  def get_dlq_destination(nil), do: nil
 end

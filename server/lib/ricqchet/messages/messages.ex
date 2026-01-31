@@ -24,13 +24,19 @@ defmodule Ricqchet.Messages do
     * `:dedup_key` - Deduplication key.
     * `:dedup_ttl` - Deduplication TTL in seconds (default: 300).
     * `:max_retries` - Override max retries (default: tenant's default).
+    * `:application` - Optional. The application creating the message.
 
   """
-  def create(%Tenant{} = tenant, attrs) do
+  def create(%Tenant{} = tenant, attrs, application \\ nil) do
+    attrs = maybe_add_application_id(attrs, application)
+
     %Message{}
     |> Message.create_changeset(tenant, attrs)
     |> Repo.insert()
   end
+
+  defp maybe_add_application_id(attrs, nil), do: attrs
+  defp maybe_add_application_id(attrs, %{id: id}), do: Map.put(attrs, :application_id, id)
 
   @doc """
   Creates a new message associated with a batch.
@@ -39,8 +45,11 @@ defmodule Ricqchet.Messages do
   regular dispatcher since it has a batch_id. It will be delivered when
   the batch is dispatched.
   """
-  def create_for_batch(%Tenant{} = tenant, batch, attrs) do
-    attrs = Map.put(attrs, :batch_id, batch.id)
+  def create_for_batch(%Tenant{} = tenant, batch, attrs, application \\ nil) do
+    attrs =
+      attrs
+      |> Map.put(:batch_id, batch.id)
+      |> maybe_add_application_id(application)
 
     %Message{}
     |> Message.create_changeset(tenant, attrs)
@@ -155,10 +164,14 @@ defmodule Ricqchet.Messages do
 
   @doc """
   Marks a message as failed and schedules a retry if attempts remain.
+
+  If the message is permanently failed (attempts >= max_retries), triggers
+  a DLQ notification if the application has a DLQ destination configured.
   """
   def mark_failed(%Message{} = message, error, response \\ nil) do
     attempts = message.attempts + 1
     now = DateTime.utc_now()
+    permanently_failed = attempts >= message.max_retries
 
     base_changes = %{
       attempts: attempts,
@@ -168,15 +181,25 @@ defmodule Ricqchet.Messages do
     }
 
     status_changes =
-      if attempts >= message.max_retries do
+      if permanently_failed do
         %{status: "failed", completed_at: now}
       else
         %{status: "pending", scheduled_at: DateTime.add(now, backoff_seconds(attempts), :second)}
       end
 
-    message
-    |> Message.changeset(Map.merge(base_changes, status_changes))
-    |> Repo.update()
+    result =
+      message
+      |> Message.changeset(Map.merge(base_changes, status_changes))
+      |> Repo.update()
+
+    case result do
+      {:ok, updated_message} when permanently_failed ->
+        Ricqchet.Dlq.maybe_notify_failure(updated_message)
+        {:ok, updated_message}
+
+      other ->
+        other
+    end
   end
 
   @doc """
