@@ -30,6 +30,23 @@ defmodule Ricqchet.Client do
   - `cancel_message(message_id)` - Cancel a pending message
   - `get_signing_secret()` - Retrieve the signing secret
   - `config()` - Returns the client configuration
+
+  ## Testing
+
+  For testing, configure the test adapter in your `config/test.exs`:
+
+      config :ricqchet, adapter: Ricqchet.Adapters.Test
+
+  Then use `Ricqchet.Testing` for assertions:
+
+      import Ricqchet.Testing
+
+      test "publishes message" do
+        {:ok, _} = MyApp.Queue.publish(%{event: "test"})
+        assert_published destination: "https://myapp.com/webhook"
+      end
+
+  See `Ricqchet.Testing` for more details.
   """
 
   defmacro __using__(opts) do
@@ -49,6 +66,10 @@ defmodule Ricqchet.Client do
           destination: @destination,
           timeout: @timeout
         }
+      end
+
+      defp adapter do
+        Application.get_env(:ricqchet, :adapter, Ricqchet.Client.HTTP)
       end
 
       if @destination do
@@ -73,7 +94,7 @@ defmodule Ricqchet.Client do
         """
         def publish(payload, opts \\ []) do
           destination = Keyword.get(opts, :destination, @destination)
-          Ricqchet.Client.HTTP.publish(config(), destination, payload, opts)
+          adapter().publish(config(), destination, payload, opts)
         end
       end
 
@@ -83,7 +104,7 @@ defmodule Ricqchet.Client do
       See `publish/2` for available options.
       """
       def publish_to(destination, payload, opts \\ []) do
-        Ricqchet.Client.HTTP.publish(config(), destination, payload, opts)
+        adapter().publish(config(), destination, payload, opts)
       end
 
       @doc """
@@ -98,7 +119,7 @@ defmodule Ricqchet.Client do
 
       """
       def publish_fan_out(destinations, payload, opts \\ []) when is_list(destinations) do
-        Ricqchet.Client.HTTP.publish_fan_out(config(), destinations, payload, opts)
+        adapter().publish_fan_out(config(), destinations, payload, opts)
       end
 
       @doc """
@@ -110,7 +131,7 @@ defmodule Ricqchet.Client do
 
       """
       def get_message(message_id) do
-        Ricqchet.Client.HTTP.get_message(config(), message_id)
+        adapter().get_message(config(), message_id)
       end
 
       @doc """
@@ -125,7 +146,7 @@ defmodule Ricqchet.Client do
 
       """
       def cancel_message(message_id) do
-        Ricqchet.Client.HTTP.cancel_message(config(), message_id)
+        adapter().cancel_message(config(), message_id)
       end
 
       @doc """
@@ -137,7 +158,7 @@ defmodule Ricqchet.Client do
 
       """
       def get_signing_secret do
-        Ricqchet.Client.HTTP.get_signing_secret(config())
+        adapter().get_signing_secret(config())
       end
     end
   end
