@@ -14,10 +14,21 @@ defmodule RicqchetWeb.Schemas.PublishHeaders do
       %Parameter{
         name: "Ricqchet-Destination",
         in: :header,
-        required: true,
+        required: false,
         schema: %Schema{type: :string, format: :uri},
         description:
-          "Full destination URL including scheme (e.g., https://example.com/webhook). The message payload will be delivered to this URL."
+          "Full destination URL including scheme (e.g., https://example.com/webhook). " <>
+            "Required unless using Ricqchet-Fan-Out. Cannot be used together with Ricqchet-Fan-Out."
+      },
+      %Parameter{
+        name: "Ricqchet-Fan-Out",
+        in: :header,
+        required: false,
+        schema: %Schema{type: :string},
+        description:
+          "Comma-separated list of destination URLs for fan-out delivery. " <>
+            "Creates a separate message for each destination. Maximum 100 destinations. " <>
+            "Cannot be used with Ricqchet-Destination or Ricqchet-Batch-Key."
       },
       %Parameter{
         name: "Ricqchet-Delay",

@@ -53,7 +53,7 @@ defmodule RicqchetWeb.PublishControllerTest do
       conn = post(conn, "/v1/publish", ~s({"event": "test"}))
 
       assert json_response(conn, 422)["error"] == "validation_error"
-      assert json_response(conn, 422)["message"] =~ "Ricqchet-Destination header is required"
+      assert json_response(conn, 422)["message"] =~ "Ricqchet-Destination or Ricqchet-Fan-Out"
     end
 
     test "returns 422 for invalid destination url", %{conn: conn} do
@@ -201,6 +201,118 @@ defmodule RicqchetWeb.PublishControllerTest do
       message = Messages.get!(response["message_id"])
 
       assert message.headers["x-custom"] == "custom-value"
+    end
+  end
+
+  describe "create/2 with fan-out" do
+    test "creates multiple messages for fan-out destinations", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header(
+          "ricqchet-fan-out",
+          "https://api1.example.com/webhook, https://api2.example.com/webhook, https://api3.example.com/webhook"
+        )
+        |> post("/v1/publish", ~s({"event": "test"}))
+
+      response = json_response(conn, 202)
+      assert is_list(response["message_ids"])
+      assert length(response["message_ids"]) == 3
+
+      # Verify each message was created with correct destination
+      destinations =
+        response["message_ids"]
+        |> Enum.map(fn id -> Messages.get!(id).destination_url end)
+        |> Enum.sort()
+
+      assert destinations == [
+               "https://api1.example.com/webhook",
+               "https://api2.example.com/webhook",
+               "https://api3.example.com/webhook"
+             ]
+    end
+
+    test "all fan-out messages share the same payload", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header(
+          "ricqchet-fan-out",
+          "https://api1.example.com/webhook, https://api2.example.com/webhook"
+        )
+        |> post("/v1/publish", ~s({"event": "broadcast"}))
+
+      response = json_response(conn, 202)
+      messages = Enum.map(response["message_ids"], &Messages.get!/1)
+
+      # All messages should have the same payload
+      payloads = Enum.map(messages, & &1.payload)
+      [first_payload | rest] = payloads
+      assert Enum.all?(rest, &(&1 == first_payload))
+      assert first_payload =~ "broadcast"
+    end
+
+    test "returns 422 when using both destination and fan-out", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("ricqchet-destination", "https://example.com/api")
+        |> put_req_header(
+          "ricqchet-fan-out",
+          "https://api1.example.com, https://api2.example.com"
+        )
+        |> post("/v1/publish", ~s({"event": "test"}))
+
+      assert json_response(conn, 422)["error"] == "validation_error"
+      assert json_response(conn, 422)["message"] =~ "Cannot use both"
+    end
+
+    test "returns 422 when using fan-out with batching", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header(
+          "ricqchet-fan-out",
+          "https://api1.example.com, https://api2.example.com"
+        )
+        |> put_req_header("ricqchet-batch-key", "my-batch")
+        |> post("/v1/publish", ~s({"event": "test"}))
+
+      assert json_response(conn, 422)["error"] == "validation_error"
+      assert json_response(conn, 422)["message"] =~ "cannot be used with"
+    end
+
+    test "returns 422 for invalid fan-out url", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("ricqchet-fan-out", "https://api1.example.com, not-a-url")
+        |> post("/v1/publish", ~s({"event": "test"}))
+
+      assert json_response(conn, 422)["error"] == "validation_error"
+      assert json_response(conn, 422)["message"] =~ "Invalid fan-out URL"
+    end
+
+    test "returns 422 for empty fan-out header", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("ricqchet-fan-out", "")
+        |> post("/v1/publish", ~s({"event": "test"}))
+
+      assert json_response(conn, 422)["error"] == "validation_error"
+      assert json_response(conn, 422)["message"] =~ "cannot be empty"
+    end
+
+    test "applies delay to all fan-out messages", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header(
+          "ricqchet-fan-out",
+          "https://api1.example.com/webhook, https://api2.example.com/webhook"
+        )
+        |> put_req_header("ricqchet-delay", "30s")
+        |> post("/v1/publish", ~s({"event": "test"}))
+
+      response = json_response(conn, 202)
+      messages = Enum.map(response["message_ids"], &Messages.get!/1)
+
+      # All messages should have same scheduled delay
+      assert Enum.all?(messages, &(&1.status == "pending"))
     end
   end
 end
