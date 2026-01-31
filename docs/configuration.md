@@ -8,12 +8,17 @@ Configure Oban for reliable message delivery in `config/config.exs`:
 config :ricqchet, Oban,
   repo: Ricqchet.Repo,
   plugins: [Oban.Plugins.Pruner],
-  queues: [delivery: 50]  # 50 concurrent delivery workers
+  queues: [delivery: 50, dlq_notifications: 10]
 ```
 
 ### Queue Concurrency
 
-The `delivery` queue controls how many messages can be delivered simultaneously. Adjust based on your infrastructure:
+| Queue | Purpose | Default |
+|-------|---------|---------|
+| `delivery` | Message/batch delivery to destinations | 50 |
+| `dlq_notifications` | DLQ webhook notifications | 10 |
+
+Adjust based on your infrastructure:
 
 ```elixir
 # Low traffic
