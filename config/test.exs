@@ -35,3 +35,7 @@ config :logger, level: :warning
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
+
+# Use test adapter for Swoosh and disable API client
+config :ricqchet, Ricqchet.Mailer, adapter: Swoosh.Adapters.Test
+config :swoosh, :api_client, false

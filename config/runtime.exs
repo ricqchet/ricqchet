@@ -31,6 +31,15 @@ if config_env() == :prod do
       For example: ecto://USER:PASS@HOST/DATABASE
       """
 
+  jwt_secret =
+    System.get_env("JWT_SECRET") ||
+      raise """
+      environment variable JWT_SECRET is missing.
+      You can generate one by calling: mix phx.gen.secret
+      """
+
+  config :ricqchet, jwt_secret: jwt_secret
+
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
   config :ricqchet, Ricqchet.Repo,

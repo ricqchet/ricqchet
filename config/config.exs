@@ -34,6 +34,15 @@ config :ricqchet,
   batch_default_timeout_seconds: 5,
   batch_dispatcher_enabled: true
 
+# JWT configuration
+config :ricqchet,
+  jwt_secret: "dev-secret-at-least-32-characters!!",
+  jwt_access_token_ttl: 15 * 60,
+  jwt_refresh_token_ttl: 7 * 24 * 60 * 60
+
+# Swoosh mailer configuration
+config :ricqchet, Ricqchet.Mailer, adapter: Swoosh.Adapters.Local
+
 # Configure Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",

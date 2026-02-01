@@ -53,6 +53,26 @@ defmodule Ricqchet.Users do
   end
 
   @doc """
+  Authenticates a user by email and password.
+
+  Only authenticates users with `status: "active"`.
+  Returns `{:ok, user}` on success or `{:error, :invalid_credentials}` on failure.
+
+  ## Examples
+
+      iex> authenticate_user("user@example.com", "correct_password")
+      {:ok, %User{}}
+
+      iex> authenticate_user("user@example.com", "wrong_password")
+      {:error, :invalid_credentials}
+
+  """
+  def authenticate_user(email, password) when is_binary(email) and is_binary(password) do
+    user = get_user_by_email(email)
+    verify_password(user, password)
+  end
+
+  @doc """
   Authenticates a user for a given tenant by email and password.
 
   Only authenticates users with `status: "active"`.
@@ -122,6 +142,17 @@ defmodule Ricqchet.Users do
   def confirm_user(%User{} = user) do
     user
     |> User.confirm_changeset()
+    |> Repo.update()
+  end
+
+  @doc """
+  Increments the user's token version, invalidating all existing JWT tokens.
+
+  This is used to log out a user from all sessions (e.g., on password change).
+  """
+  def increment_token_version(%User{} = user) do
+    user
+    |> User.increment_token_version_changeset()
     |> Repo.update()
   end
 
