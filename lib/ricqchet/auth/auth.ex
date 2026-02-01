@@ -232,6 +232,37 @@ defmodule Ricqchet.Auth do
     :ok
   end
 
+  @doc """
+  Changes a user's password.
+
+  Verifies the current password, updates to the new password, increments the
+  token version (invalidating all existing sessions), and returns new tokens
+  for the current session.
+
+  ## Examples
+
+      iex> change_password(user, "current_password", "new_password123")
+      {:ok, %{user: %User{}, access_token: "...", refresh_token: "...", expires_in: 900}}
+
+      iex> change_password(user, "wrong_password", "new_password123")
+      {:error, :invalid_current_password}
+  """
+  def change_password(%User{} = user, current_password, new_password) do
+    with {:ok, _user} <- Users.change_password(user, current_password, new_password),
+         {:ok, updated_user} <- Users.increment_token_version(user),
+         :ok <- revoke_all_refresh_tokens_for_user(user),
+         {:ok, access_token, _claims} <- Token.generate_access_token(updated_user),
+         {:ok, refresh_token} <- create_refresh_token(updated_user) do
+      {:ok,
+       %{
+         user: Repo.preload(updated_user, :tenant),
+         access_token: access_token,
+         refresh_token: refresh_token.token,
+         expires_in: Application.get_env(:ricqchet, :jwt_access_token_ttl, 900)
+       }}
+    end
+  end
+
   # Private functions
 
   defp verify_email_confirmed(%User{confirmed_at: nil}), do: {:error, :email_not_verified}

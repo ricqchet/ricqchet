@@ -443,4 +443,107 @@ defmodule RicqchetWeb.AuthControllerTest do
       assert response["error"] == "validation_error"
     end
   end
+
+  describe "POST /v1/auth/change-password" do
+    setup do
+      # Create and verify a user, then login to get tokens
+      {:ok, %{user: _user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "changepassuser@example.com",
+          "password" => "old_password_123",
+          "tenant_name" => "Change Pass Org"
+        })
+
+      {:ok, _verified_user} = Auth.verify_email(token)
+      {:ok, auth_data} = Auth.login("changepassuser@example.com", "old_password_123")
+
+      %{
+        user: auth_data.user,
+        access_token: auth_data.access_token,
+        refresh_token: auth_data.refresh_token
+      }
+    end
+
+    test "changes password and returns new tokens", %{conn: conn, access_token: token} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/v1/auth/change-password", %{
+          current_password: "old_password_123",
+          new_password: "new_password_456"
+        })
+
+      response = json_response(conn, 200)
+
+      assert response["access_token"]
+      assert response["refresh_token"]
+      assert response["expires_in"]
+      assert response["user"]["email"] == "changepassuser@example.com"
+
+      # Verify new password works
+      {:ok, _auth_data} = Auth.login("changepassuser@example.com", "new_password_456")
+    end
+
+    test "invalidates old access token after password change", %{
+      conn: conn,
+      access_token: old_token
+    } do
+      # Change password
+      conn
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("authorization", "Bearer #{old_token}")
+      |> post("/v1/auth/change-password", %{
+        current_password: "old_password_123",
+        new_password: "new_password_456"
+      })
+
+      # Try to use old token - should fail
+      conn2 =
+        build_conn()
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{old_token}")
+        |> get("/v1/users/me")
+
+      assert json_response(conn2, 401)
+    end
+
+    test "returns 401 with incorrect current password", %{conn: conn, access_token: token} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/v1/auth/change-password", %{
+          current_password: "wrong_password",
+          new_password: "new_password_456"
+        })
+
+      response = json_response(conn, 401)
+      assert response["error"] == "unauthorized"
+      assert response["message"] =~ "incorrect"
+    end
+
+    test "returns 422 when passwords are missing", %{conn: conn, access_token: token} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/v1/auth/change-password", %{})
+
+      response = json_response(conn, 422)
+      assert response["error"] == "validation_error"
+    end
+
+    test "returns 401 without authentication", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/change-password", %{
+          current_password: "old_password",
+          new_password: "new_password_123"
+        })
+
+      assert json_response(conn, 401)
+    end
+  end
 end

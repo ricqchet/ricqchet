@@ -46,6 +46,7 @@ defmodule RicqchetWeb.Router do
 
     post "/resend-verification", AuthController, :resend_verification
     post "/logout", AuthController, :logout
+    post "/change-password", AuthController, :change_password
   end
 
   # User profile endpoints (JWT auth required)
