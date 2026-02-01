@@ -64,6 +64,10 @@ defmodule RicqchetWeb.Router do
     get "/messages/:id", MessageController, :show
     delete "/messages/:id", MessageController, :delete
     get "/signing-secret", TenantController, :signing_secret
+
+    # Application management
+    resources "/applications", ApplicationController,
+      only: [:index, :show, :create, :update, :delete]
   end
 
   # Enable LiveDashboard in development with basic auth protection

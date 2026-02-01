@@ -41,6 +41,28 @@ defmodule RicqchetWeb.Schemas.Helpers do
   end
 
   @doc """
+  Generates standard list endpoint responses (200 + errors).
+  """
+  @spec list_responses(module(), [integer()]) :: map()
+  def list_responses(schema, error_codes \\ [401, 429]) do
+    Map.merge(
+      %{200 => json_response(schema, "Success")},
+      error_responses(error_codes)
+    )
+  end
+
+  @doc """
+  Generates standard update endpoint responses (200 + errors).
+  """
+  @spec update_responses(module(), [integer()]) :: map()
+  def update_responses(schema, error_codes \\ [401, 404, 422, 429]) do
+    Map.merge(
+      %{200 => json_response(schema, "Success")},
+      error_responses(error_codes)
+    )
+  end
+
+  @doc """
   Generates standard delete endpoint responses (200 + errors).
   """
   @spec delete_responses(module(), [integer()]) :: map()
