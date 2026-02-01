@@ -1,21 +1,17 @@
-name: Deploy Server
+name: Deploy
 
 on:
   release:
     types: [published]
 
 concurrency:
-  group: deploy-server-${{ github.ref }}
+  group: deploy-${{ github.ref }}
   cancel-in-progress: false
-
-defaults:
-  run:
-    working-directory: server
 
 jobs:
   deploy:
     name: Deploy to Fly.io
-    if: startsWith(github.event.release.tag_name, 'server-v')
+    if: startsWith(github.event.release.tag_name, 'ricqchet-v')
     runs-on: ubuntu-latest
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -25,7 +21,7 @@ jobs:
       - name: Verify Fly.io configuration
         run: |
           if [ ! -f "fly.toml" ]; then
-            echo "Error: fly.toml not found in server directory."
+            echo "Error: fly.toml not found."
             echo "Please run 'flyctl launch' locally to initialize your Fly.io app,"
             echo "then commit the generated fly.toml (and Dockerfile if required) before deploying."
             exit 1

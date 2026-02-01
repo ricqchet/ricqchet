@@ -1,4 +1,4 @@
-# Elixir/Mix artifacts (server and elixir client)
+# Elixir/Mix artifacts
 _build/
 deps/
 cover/
@@ -10,11 +10,6 @@ erl_crash.dump
 
 # Dialyzer PLT files
 priv/plts/
-
-# Node.js artifacts (typescript client)
-node_modules/
-dist/
-*.tsbuildinfo
 
 # IDE and editor files
 .idea/

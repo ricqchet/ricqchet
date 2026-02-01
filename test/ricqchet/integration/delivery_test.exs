@@ -1,4 +1,4 @@
-defmodule Ricqchet.Integration.DeliveryTest do
+defmodule RicqchetWeb.Integration.DeliveryTest do
   @moduledoc """
   Integration tests for the complete message delivery flow.
 
