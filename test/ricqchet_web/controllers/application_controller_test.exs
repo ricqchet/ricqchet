@@ -161,6 +161,37 @@ defmodule RicqchetWeb.ApplicationControllerTest do
       assert MapSet.disjoint?(ids1, ids2)
     end
 
+    test "supports backward pagination with last/before cursor", %{conn: conn, tenant: tenant} do
+      # Create additional applications
+      for i <- 1..5 do
+        Applications.create_application(tenant, %{name: "App #{i}"})
+      end
+
+      [auth_header] = get_req_header(conn, "authorization")
+
+      # Get last page first
+      conn1 = get(conn, "/v1/applications", %{last: 2})
+      response1 = json_response(conn1, 200)
+      assert length(response1["data"]) == 2
+      assert response1["meta"]["has_previous_page"] == true
+      start_cursor = response1["meta"]["start_cursor"]
+
+      # Get previous page using before cursor
+      conn2 =
+        build_conn()
+        |> put_req_header("authorization", auth_header)
+        |> get("/v1/applications", %{last: 2, before: start_cursor})
+
+      response2 = json_response(conn2, 200)
+      assert length(response2["data"]) == 2
+      assert response2["meta"]["has_next_page"] == true
+
+      # Ensure no overlap between pages
+      ids1 = MapSet.new(response1["data"], & &1["id"])
+      ids2 = MapSet.new(response2["data"], & &1["id"])
+      assert MapSet.disjoint?(ids1, ids2)
+    end
+
     test "supports offset-based pagination", %{conn: conn, tenant: tenant} do
       # Create additional applications
       for i <- 1..5 do

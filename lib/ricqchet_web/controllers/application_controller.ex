@@ -339,9 +339,18 @@ defmodule RicqchetWeb.ApplicationController do
 
   defp maybe_convert_to_integer(params, key) do
     case Map.get(params, key) do
-      nil -> params
-      value when is_integer(value) -> params
-      value when is_binary(value) -> Map.put(params, key, String.to_integer(value))
+      nil ->
+        params
+
+      value when is_integer(value) ->
+        params
+
+      value when is_binary(value) ->
+        case Integer.parse(value) do
+          {int, ""} -> Map.put(params, key, int)
+          # Invalid integer string - leave as-is, let Flop validation handle it
+          _ -> params
+        end
     end
   end
 
