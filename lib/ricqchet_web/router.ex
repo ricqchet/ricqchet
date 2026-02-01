@@ -61,10 +61,8 @@ defmodule RicqchetWeb.Router do
     pipe_through [:api, :jwt_authenticated]
 
     resources "/applications", ApplicationController,
-      only: [:index, :show, :create, :update, :delete]
-
-    # API key management (nested under applications for create/list)
-    resources "/applications", ApplicationController, only: [] do
+      only: [:index, :show, :create, :update, :delete] do
+      # API key management (nested under applications for create/list)
       resources "/api-keys", ApiKeyController, only: [:index, :create]
     end
 

@@ -169,8 +169,9 @@ alias Ricqchet.ApiKeys
 
 {:ok, api_key} = ApiKeys.create_api_key(application, %{name: "Production Key"})
 
-# IMPORTANT: Save this value - it's only shown once!
-IO.puts("API Key: #{api_key.api_key}")
+# IMPORTANT: Store this value securely - it's only shown once!
+# Never log API keys in production. Store in a secrets manager or env variable.
+your_secret_storage.store("api_key", api_key.api_key)
 ```
 
 The plaintext API key is only available immediately after creation. Store it securely.
@@ -188,7 +189,7 @@ curl -X POST "http://localhost:4000/v1/publish/https://example.com/webhook" \
 
 ## API Key Management
 
-API keys can be managed via REST API endpoints (requires JWT authentication with admin role).
+API keys can be managed via REST API endpoints. Listing keys is available to any authenticated tenant member, while creating, revoking, and rotating keys require JWT authentication with an admin role.
 
 ### API Key Lifecycle
 
@@ -333,9 +334,10 @@ ApiKeys.list_api_keys_for_application(application)
 # Revoke a key
 ApiKeys.revoke_api_key(api_key)
 
-# Rotate a key
-{:ok, new_api_key} = ApiKeys.rotate_api_key(old_api_key)
-IO.puts("New API Key: #{new_api_key.api_key}")
+# Rotate a key (returns both revoked and new key)
+{:ok, {_revoked_key, new_api_key}} = ApiKeys.rotate_api_key(old_api_key)
+# Store the new key securely - never log API keys
+your_secret_storage.store("api_key", new_api_key.api_key)
 ```
 
 ## Key Expiration

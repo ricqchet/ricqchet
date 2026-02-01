@@ -45,7 +45,7 @@ defmodule RicqchetWeb.ApiKeyController do
         description: "Application ID"
       ]
     ],
-    responses: Schemas.Helpers.list_responses(Schemas.ApiKeyList),
+    responses: Schemas.Helpers.list_responses(Schemas.ApiKeyList, [401, 404, 429]),
     security: [%{"bearer_auth" => []}]
   )
 
@@ -105,9 +105,12 @@ defmodule RicqchetWeb.ApiKeyController do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
+    # Only allow documented request-body fields to prevent status override
+    attrs = Map.take(params, ["name", "expires_at"])
+
     with :ok <- authorize_admin(user),
          {:ok, application} <- get_application_or_error(tenant, application_id),
-         {:ok, api_key} <- ApiKeys.create_api_key(application, params) do
+         {:ok, api_key} <- ApiKeys.create_api_key(application, attrs) do
       conn
       |> put_status(:created)
       |> render(:created, api_key: api_key)
