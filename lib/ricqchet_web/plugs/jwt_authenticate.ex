@@ -70,7 +70,8 @@ defmodule RicqchetWeb.Plugs.JWTAuthenticate do
 
   defp load_and_validate_user(%{"sub" => user_id, "ver" => token_version}) do
     case Users.get_user(user_id) do
-      %User{token_version: ^token_version, status: "active"} = user ->
+      %User{token_version: ^token_version, status: status} = user
+      when status in ["active", "pending"] ->
         {:ok, Repo.preload(user, :tenant)}
 
       %User{token_version: _different_version} ->
