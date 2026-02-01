@@ -1,29 +1,21 @@
-name: CI Server
+name: CI
 
 on:
   merge_group:
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      - 'server/**'
   push:
     branches: [main]
-    paths:
-      - 'server/**'
   workflow_dispatch:
 
 concurrency:
-  group: ci-server-${{ github.head_ref || github.run_id }}
+  group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 env:
   MIX_ENV: test
   ELIXIR_VERSION: "1.18"
   OTP_VERSION: "27"
-
-defaults:
-  run:
-    working-directory: server
 
 jobs:
   credo:
@@ -40,10 +32,10 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            server/deps
-            server/_build
-          key: server-mix-${{ runner.os }}-${{ hashFiles('server/mix.lock') }}
-          restore-keys: server-mix-${{ runner.os }}-
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
 
       - run: mix deps.get
       - run: mix credo --strict
@@ -62,10 +54,10 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            server/deps
-            server/_build
-          key: server-mix-${{ runner.os }}-${{ hashFiles('server/mix.lock') }}
-          restore-keys: server-mix-${{ runner.os }}-
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
 
       - run: mix deps.get
       - run: mix deps.unlock --check-unused
@@ -85,16 +77,16 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            server/deps
-            server/_build
-          key: server-mix-${{ runner.os }}-${{ hashFiles('server/mix.lock') }}
-          restore-keys: server-mix-${{ runner.os }}-
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
 
       - uses: actions/cache@v4
         with:
-          path: server/priv/plts
-          key: server-plt-${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-${{ hashFiles('server/mix.lock') }}
-          restore-keys: server-plt-${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-
+          path: priv/plts
+          key: plt-${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-${{ hashFiles('mix.lock') }}
+          restore-keys: plt-${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-
 
       - run: mix deps.get
       - run: mkdir -p priv/plts
@@ -114,10 +106,10 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            server/deps
-            server/_build
-          key: server-mix-${{ runner.os }}-${{ hashFiles('server/mix.lock') }}
-          restore-keys: server-mix-${{ runner.os }}-
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
 
       - run: mix deps.get
       - run: mix format --check-formatted
@@ -150,10 +142,10 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            server/deps
-            server/_build
-          key: server-mix-${{ runner.os }}-${{ hashFiles('server/mix.lock') }}
-          restore-keys: server-mix-${{ runner.os }}-
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
 
       - run: mix deps.get
       - run: mix compile --warnings-as-errors
