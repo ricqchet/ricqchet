@@ -71,6 +71,9 @@ defmodule Ricqchet.MixProject do
       # API Documentation
       {:open_api_spex, "~> 3.21"},
 
+      # CORS
+      {:corsica, "~> 2.1"},
+
       # Dev/Test tooling
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},

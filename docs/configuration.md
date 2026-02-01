@@ -105,6 +105,43 @@ The HTTP client (Req) is configured with:
 
 These values are currently hardcoded in `Ricqchet.Delivery.HttpClient`.
 
+## CORS
+
+CORS is configured to allow cross-origin requests from web dashboards and frontends.
+
+### Development
+
+In development, localhost origins are allowed by default:
+
+```elixir
+# config/config.exs
+config :ricqchet, :cors,
+  allowed_origins: ["http://localhost:3000", "http://localhost:4000"],
+  allow_credentials: true,
+  max_age: 86_400
+```
+
+### Production
+
+In production, set allowed origins via environment variable:
+
+```bash
+# Comma-separated list of allowed origins
+CORS_ALLOWED_ORIGINS=https://app.example.com,https://dashboard.example.com
+```
+
+### CORS Headers
+
+The following headers are allowed:
+- `content-type`
+- `authorization`
+- `x-api-key`
+- `x-request-id`
+
+Allowed methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+
+Credentials (cookies, authorization headers) are supported for authenticated requests.
+
 ## Environment Variables
 
 | Variable | Description | Default |
@@ -114,6 +151,7 @@ These values are currently hardcoded in `Ricqchet.Delivery.HttpClient`.
 | `SECRET_KEY_BASE` | Phoenix secret key | - |
 | `PHX_HOST` | Application host for URLs | localhost |
 | `PORT` | HTTP server port | 4000 |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | http://localhost:3000, http://localhost:4000 |
 
 ## Development Dashboard
 

@@ -40,6 +40,13 @@ config :ricqchet,
   jwt_access_token_ttl: 15 * 60,
   jwt_refresh_token_ttl: 7 * 24 * 60 * 60
 
+# CORS configuration
+# In production, set CORS_ALLOWED_ORIGINS env var (comma-separated list)
+config :ricqchet, :cors,
+  allowed_origins: ["http://localhost:3000", "http://localhost:4000"],
+  allow_credentials: true,
+  max_age: 86_400
+
 # Swoosh mailer configuration
 config :ricqchet, Ricqchet.Mailer, adapter: Swoosh.Adapters.Local
 

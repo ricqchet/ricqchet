@@ -51,5 +51,13 @@ defmodule RicqchetWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+
+  plug Corsica,
+    origins: {RicqchetWeb.CorsConfig, :allowed_origin?, []},
+    allow_headers: ["content-type", "authorization", "x-api-key", "x-request-id"],
+    allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_credentials: true,
+    max_age: 86_400
+
   plug RicqchetWeb.Router
 end
