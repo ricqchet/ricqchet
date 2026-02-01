@@ -3,6 +3,8 @@ defmodule RicqchetWeb.ApplicationJSON do
   JSON views for application endpoints.
   """
 
+  require Logger
+
   alias Ricqchet.ApiKeys.ApiKey
   alias Ricqchet.Applications.Application
 
@@ -53,8 +55,12 @@ defmodule RicqchetWeb.ApplicationJSON do
   defp application_summary(%Application{} = app) do
     api_key_count =
       case app.api_keys do
-        %Ecto.Association.NotLoaded{} -> 0
-        keys when is_list(keys) -> length(keys)
+        %Ecto.Association.NotLoaded{} ->
+          Logger.warning("api_keys not preloaded for application #{app.id}")
+          0
+
+        keys when is_list(keys) ->
+          length(keys)
       end
 
     %{
@@ -72,8 +78,12 @@ defmodule RicqchetWeb.ApplicationJSON do
   defp application_detail(%Application{} = app) do
     api_keys =
       case app.api_keys do
-        %Ecto.Association.NotLoaded{} -> []
-        keys when is_list(keys) -> Enum.map(keys, &api_key_summary/1)
+        %Ecto.Association.NotLoaded{} ->
+          Logger.warning("api_keys not preloaded for application #{app.id}")
+          []
+
+        keys when is_list(keys) ->
+          Enum.map(keys, &api_key_summary/1)
       end
 
     %{

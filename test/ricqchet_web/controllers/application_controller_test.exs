@@ -306,7 +306,7 @@ defmodule RicqchetWeb.ApplicationControllerTest do
       # Verify application is deleted
       assert Applications.get_application(app.id) == nil
 
-      # Verify API keys are deleted (cascade delete removes them after app deletion)
+      # Verify API keys are removed (keys are revoked first, then deleted with the app)
       assert ApiKeys.get_api_key(key1.id) == nil
     end
 

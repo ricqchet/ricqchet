@@ -202,15 +202,20 @@ defmodule RicqchetWeb.ApplicationController do
 
   defp delete_application_with_keys(application) do
     Repo.transaction(fn ->
-      # Revoke all API keys first
-      Enum.each(application.api_keys, fn api_key ->
-        {:ok, _} = ApiKeys.revoke_api_key(api_key)
-      end)
+      with :ok <- revoke_all_api_keys(application.api_keys),
+           {:ok, _} <- Applications.delete_application(application) do
+        :ok
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
 
-      # Delete the application
-      case Applications.delete_application(application) do
-        {:ok, _} -> :ok
-        {:error, changeset} -> Repo.rollback(changeset)
+  defp revoke_all_api_keys(api_keys) do
+    Enum.reduce_while(api_keys, :ok, fn api_key, _acc ->
+      case ApiKeys.revoke_api_key(api_key) do
+        {:ok, _} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
   end
