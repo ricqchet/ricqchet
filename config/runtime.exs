@@ -64,6 +64,10 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
+  # Frontend URL for email verification links
+  frontend_url = System.get_env("FRONTEND_URL") || "https://#{host}"
+  config :ricqchet, :frontend_url, frontend_url
+
   config :ricqchet, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :ricqchet, RicqchetWeb.Endpoint,

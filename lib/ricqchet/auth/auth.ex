@@ -98,8 +98,8 @@ defmodule Ricqchet.Auth do
 
   ## Options
 
-  - `:everywhere` - If true, increments the user's token version to invalidate
-    all sessions. Default: false.
+  - `:everywhere` - If true, revokes all refresh tokens and increments the
+    user's token version to invalidate all sessions. Default: false.
 
   ## Examples
 
@@ -116,6 +116,7 @@ defmodule Ricqchet.Auth do
          {:ok, _} <- revoke_refresh_token(refresh_token) do
       if everywhere do
         user = Repo.preload(refresh_token, :user).user
+        revoke_all_refresh_tokens_for_user(user)
         Users.increment_token_version(user)
       end
 
@@ -130,8 +131,7 @@ defmodule Ricqchet.Auth do
   Refreshes an access token using a refresh token.
 
   Validates the refresh token and generates a new access token.
-  The refresh token must be valid (not expired, not revoked) and
-  the user's token version must match.
+  The refresh token must be valid (not expired, not revoked).
 
   ## Examples
 
@@ -185,7 +185,7 @@ defmodule Ricqchet.Auth do
   @doc """
   Creates a new email verification token for a user.
 
-  Deletes any existing verification tokens for the user first.
+  Deletes any existing verification tokens for the user first, atomically.
 
   ## Examples
 
@@ -193,12 +193,17 @@ defmodule Ricqchet.Auth do
       {:ok, %EmailVerificationToken{token: "abc..."}}
   """
   def create_email_verification_token(%User{} = user) do
-    # Delete existing tokens first
-    delete_email_verification_tokens_for_user(user)
+    Repo.transaction(fn ->
+      # Delete existing tokens first
+      delete_email_verification_tokens_for_user(user)
 
-    %EmailVerificationToken{}
-    |> EmailVerificationToken.create_changeset(user)
-    |> Repo.insert()
+      case %EmailVerificationToken{}
+           |> EmailVerificationToken.create_changeset(user)
+           |> Repo.insert() do
+        {:ok, token} -> token
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
   end
 
   @doc """
