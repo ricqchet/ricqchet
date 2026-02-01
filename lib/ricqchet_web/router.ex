@@ -36,6 +36,8 @@ defmodule RicqchetWeb.Router do
 
     post "/register", AuthController, :register
     post "/verify-email", AuthController, :verify_email
+    post "/login", AuthController, :login
+    post "/refresh", AuthController, :refresh
   end
 
   # Protected auth endpoints (JWT auth required)
@@ -43,6 +45,7 @@ defmodule RicqchetWeb.Router do
     pipe_through [:api, :jwt_authenticated]
 
     post "/resend-verification", AuthController, :resend_verification
+    post "/logout", AuthController, :logout
   end
 
   # API v1 endpoints (API key auth required for relay operations)

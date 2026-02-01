@@ -238,4 +238,209 @@ defmodule RicqchetWeb.AuthControllerTest do
       assert json_response(conn, 401)
     end
   end
+
+  describe "POST /v1/auth/login" do
+    setup do
+      # Create and verify a user
+      {:ok, %{user: _user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "loginuser@example.com",
+          "password" => "secure_password_123",
+          "tenant_name" => "Login Org"
+        })
+
+      {:ok, verified_user} = Auth.verify_email(token)
+      %{user: verified_user}
+    end
+
+    test "returns tokens for valid credentials", %{conn: conn, user: user} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/login", %{email: user.email, password: "secure_password_123"})
+
+      response = json_response(conn, 200)
+
+      assert response["user"]["email"] == user.email
+      assert response["user"]["status"] == "active"
+      assert response["user"]["tenant_name"]
+      assert response["access_token"]
+      assert response["refresh_token"]
+      assert response["expires_in"]
+    end
+
+    test "returns 401 for invalid password", %{conn: conn, user: user} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/login", %{email: user.email, password: "wrong_password"})
+
+      response = json_response(conn, 401)
+      assert response["error"] == "unauthorized"
+      assert response["message"] =~ "Invalid"
+    end
+
+    test "returns 401 for non-existent email", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/login", %{email: "noone@example.com", password: "password123"})
+
+      response = json_response(conn, 401)
+      assert response["error"] == "unauthorized"
+    end
+
+    test "returns 401 for unverified user", %{conn: conn} do
+      # Create an unverified user
+      {:ok, %{user: unverified_user}} =
+        Auth.register_user(%{
+          "email" => "unverified_login@example.com",
+          "password" => "secure_password_123",
+          "tenant_name" => "Unverified Org"
+        })
+
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/login", %{email: unverified_user.email, password: "secure_password_123"})
+
+      response = json_response(conn, 401)
+      assert response["error"] == "unauthorized"
+      assert response["message"] =~ "verify"
+    end
+
+    test "returns 422 when credentials are missing", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/login", %{})
+
+      response = json_response(conn, 422)
+      assert response["error"] == "validation_error"
+    end
+  end
+
+  describe "POST /v1/auth/logout" do
+    setup do
+      # Create and verify a user, then login to get tokens
+      {:ok, %{user: _user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "logoutuser@example.com",
+          "password" => "secure_password_123",
+          "tenant_name" => "Logout Org"
+        })
+
+      {:ok, _verified_user} = Auth.verify_email(token)
+      {:ok, auth_data} = Auth.login("logoutuser@example.com", "secure_password_123")
+
+      %{
+        user: auth_data.user,
+        access_token: auth_data.access_token,
+        refresh_token: auth_data.refresh_token
+      }
+    end
+
+    test "logs out user and revokes refresh token", %{
+      conn: conn,
+      access_token: access_token,
+      refresh_token: refresh_token
+    } do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{access_token}")
+        |> post("/v1/auth/logout", %{refresh_token: refresh_token})
+
+      response = json_response(conn, 200)
+      assert response["message"] =~ "Logged out"
+
+      # Try to use the refresh token - should fail
+      conn2 =
+        build_conn()
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/refresh", %{refresh_token: refresh_token})
+
+      assert json_response(conn2, 401)
+    end
+
+    test "logs out everywhere when requested", %{
+      conn: conn,
+      access_token: access_token,
+      refresh_token: refresh_token
+    } do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{access_token}")
+        |> post("/v1/auth/logout", %{refresh_token: refresh_token, everywhere: true})
+
+      response = json_response(conn, 200)
+      assert response["message"] =~ "all sessions"
+    end
+
+    test "returns 401 without authentication", %{conn: conn, refresh_token: refresh_token} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/logout", %{refresh_token: refresh_token})
+
+      assert json_response(conn, 401)
+    end
+  end
+
+  describe "POST /v1/auth/refresh" do
+    setup do
+      # Create and verify a user, then login to get tokens
+      {:ok, %{user: _user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "refreshuser@example.com",
+          "password" => "secure_password_123",
+          "tenant_name" => "Refresh Org"
+        })
+
+      {:ok, _verified_user} = Auth.verify_email(token)
+      {:ok, auth_data} = Auth.login("refreshuser@example.com", "secure_password_123")
+
+      %{
+        user: auth_data.user,
+        access_token: auth_data.access_token,
+        refresh_token: auth_data.refresh_token
+      }
+    end
+
+    test "returns new access token with valid refresh token", %{
+      conn: conn,
+      refresh_token: refresh_token
+    } do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/refresh", %{refresh_token: refresh_token})
+
+      response = json_response(conn, 200)
+
+      assert response["access_token"]
+      assert response["expires_in"]
+    end
+
+    test "returns 401 with invalid refresh token", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/refresh", %{refresh_token: "invalid_token"})
+
+      response = json_response(conn, 401)
+      assert response["error"] == "unauthorized"
+    end
+
+    test "returns 422 when refresh token is missing", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/refresh", %{})
+
+      response = json_response(conn, 422)
+      assert response["error"] == "validation_error"
+    end
+  end
 end

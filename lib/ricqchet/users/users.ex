@@ -163,7 +163,8 @@ defmodule Ricqchet.Users do
     {:error, :invalid_credentials}
   end
 
-  defp verify_password(%User{status: "active"} = user, password) do
+  defp verify_password(%User{status: status} = user, password)
+       when status in ["active", "pending"] do
     if Argon2.verify_pass(password, user.password_hash) do
       {:ok, user}
     else
@@ -172,7 +173,7 @@ defmodule Ricqchet.Users do
   end
 
   defp verify_password(%User{}, _password) do
-    # User exists but is not active (suspended/pending)
+    # User exists but is suspended
     {:error, :invalid_credentials}
   end
 end
