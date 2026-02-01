@@ -399,9 +399,10 @@ defmodule RicqchetWeb.AuthController do
   operation(:accept_invite,
     summary: "Accept tenant invitation",
     description: """
-    Accepts an invitation to join a tenant. Creates a new user account if the email
-    doesn't exist, or adds the existing user to the tenant. Returns JWT tokens for
-    immediate authentication.
+    Accepts an invitation to join a tenant. Creates a new user account for the
+    invited email address and returns JWT tokens for immediate authentication.
+
+    Returns an error if a user with that email already exists in the tenant.
     """,
     request_body:
       {"Invitation acceptance", "application/json", Schemas.Auth.AcceptInviteRequest,
@@ -409,6 +410,7 @@ defmodule RicqchetWeb.AuthController do
     responses: %{
       200 => {"Invitation accepted", "application/json", Schemas.Auth.AcceptInviteResponse},
       400 => {"Invalid or expired token", "application/json", Schemas.ErrorResponse},
+      409 => {"User already exists", "application/json", Schemas.ErrorResponse},
       422 => {"Validation error", "application/json", Schemas.ErrorResponse}
     }
   )
@@ -431,6 +433,9 @@ defmodule RicqchetWeb.AuthController do
 
       {:error, :invitation_not_pending} ->
         {:error, :invitation_not_pending}
+
+      {:error, :user_already_exists} ->
+        {:error, :user_already_exists}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:error, changeset}

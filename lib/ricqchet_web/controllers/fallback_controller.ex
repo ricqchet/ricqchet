@@ -145,6 +145,26 @@ defmodule RicqchetWeb.FallbackController do
     )
   end
 
+  def call(conn, {:error, :user_already_exists}) do
+    conn
+    |> put_status(:conflict)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error,
+      error: "user_already_exists",
+      message: "A user with this email already exists in the tenant"
+    )
+  end
+
+  def call(conn, {:error, :cannot_remove_last_admin}) do
+    conn
+    |> put_status(:forbidden)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error,
+      error: "forbidden",
+      message: "Cannot remove the last admin from the tenant"
+    )
+  end
+
   # Handle Multi transaction errors (e.g., from Auth.register_user)
   def call(conn, {:error, _step, %Ecto.Changeset{} = changeset}) do
     call(conn, {:error, changeset})

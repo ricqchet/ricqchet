@@ -129,11 +129,13 @@ defmodule RicqchetWeb.TenantUserController do
   operation(:invite,
     summary: "Invite user to tenant",
     description: """
-    Sends an invitation email to a user to join the current tenant.
+    Creates an invitation for a user to join the current tenant.
 
-    If the email belongs to an existing user, they will be added to the tenant
-    when they accept the invitation. If it's a new email, a new user account
-    will be created upon acceptance.
+    Returns the invitation details including the token. The token should be
+    sent to the invitee securely (e.g., via email) so they can accept the
+    invitation using the `/v1/auth/accept-invite` endpoint.
+
+    A new user account will be created when the invitation is accepted.
 
     **Requires admin role.**
     """,
@@ -218,7 +220,7 @@ defmodule RicqchetWeb.TenantUserController do
 
     **Requires admin role.**
 
-    Cannot remove yourself.
+    Cannot remove yourself or the last admin.
     """,
     parameters: [
       id: [
@@ -236,7 +238,7 @@ defmodule RicqchetWeb.TenantUserController do
   @doc """
   Removes a user from the current tenant.
 
-  Requires admin role. Cannot remove self.
+  Requires admin role. Cannot remove self or last admin.
   """
   def delete(conn, %{"id" => user_id}) do
     current_user = conn.assigns.current_user
@@ -245,6 +247,7 @@ defmodule RicqchetWeb.TenantUserController do
     with :ok <- authorize_admin(current_user),
          {:ok, target_user} <- get_tenant_user(tenant, user_id),
          :ok <- validate_not_self(current_user, target_user),
+         :ok <- validate_not_last_admin(target_user, tenant),
          {:ok, _user} <- Tenants.remove_user_from_tenant(target_user) do
       render(conn, :deleted, id: user_id)
     end
@@ -264,6 +267,15 @@ defmodule RicqchetWeb.TenantUserController do
 
   defp validate_not_self(%User{id: id}, %User{id: id}), do: {:error, :cannot_remove_self}
   defp validate_not_self(_current, _target), do: :ok
+
+  defp validate_not_last_admin(%User{role: "admin"} = _target_user, tenant) do
+    case Tenants.count_admins(tenant) do
+      1 -> {:error, :cannot_remove_last_admin}
+      _ -> :ok
+    end
+  end
+
+  defp validate_not_last_admin(_target_user, _tenant), do: :ok
 
   defp validate_role_change(current_user, target_user, %{"role" => new_role}, tenant) do
     # Check if demoting self from admin

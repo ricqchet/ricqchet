@@ -464,7 +464,7 @@ defmodule Ricqchet.Auth do
     {:ok, :deleted}
   end
 
-defp get_password_reset_token_by_token(token_string) when is_binary(token_string) do
+  defp get_password_reset_token_by_token(token_string) when is_binary(token_string) do
     token_hash = PasswordResetToken.hash_token(token_string)
 
     result =

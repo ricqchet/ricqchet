@@ -57,6 +57,7 @@ defmodule RicqchetWeb.TenantUserJSON do
       email: invitation.email,
       role: invitation.role,
       status: invitation.status,
+      token: invitation.token,
       expires_at: invitation.expires_at,
       inserted_at: invitation.inserted_at
     }

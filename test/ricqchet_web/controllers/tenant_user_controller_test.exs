@@ -563,5 +563,157 @@ defmodule RicqchetWeb.TenantUserControllerTest do
 
       assert json_response(conn, 422)
     end
+
+    test "returns error for expired invitation", %{
+      conn: conn,
+      admin: admin,
+      tenant: tenant
+    } do
+      # Create an invitation that expires immediately
+      {:ok, invitation} =
+        Tenants.invite_user(tenant, admin, %{
+          email: "expired@example.com",
+          role: "member",
+          ttl: 0
+        })
+
+      # Small delay to ensure expiration
+      Process.sleep(10)
+
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/accept-invite", %{
+          "token" => invitation.token,
+          "password" => "new_secure_password_123"
+        })
+
+      response = json_response(conn, 400)
+      assert response["error"] == "token_expired"
+    end
+
+    test "returns error when user already exists in tenant", %{
+      conn: conn,
+      admin: admin,
+      tenant: tenant
+    } do
+      # Create an invitation for the admin's email (who already exists)
+      {:ok, invitation} =
+        Tenants.invite_user(tenant, admin, %{
+          "email" => admin.email,
+          "role" => "member"
+        })
+
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/accept-invite", %{
+          "token" => invitation.token,
+          "password" => "new_secure_password_123"
+        })
+
+      response = json_response(conn, 409)
+      assert response["error"] == "user_already_exists"
+    end
+  end
+
+  describe "DELETE /v1/tenant/users/:id - admin removal" do
+    setup do
+      {:ok, %{user: _user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "admin1@admin-delete.com",
+          "password" => "secure_password_123",
+          "tenant_name" => "Admin Delete Org"
+        })
+
+      {:ok, unloaded_admin} = Auth.verify_email(token)
+      admin = Repo.preload(unloaded_admin, :tenant)
+      {:ok, admin_token, _claims} = Token.generate_access_token(admin)
+
+      # Create another admin
+      {:ok, unconfirmed_admin2} =
+        Users.create_user(admin.tenant, %{
+          "email" => "admin2@admin-delete.com",
+          "password" => "secure_password_123",
+          "role" => "admin"
+        })
+
+      {:ok, admin2} = Users.confirm_user(unconfirmed_admin2)
+
+      %{
+        admin: admin,
+        admin2: admin2,
+        admin_token: admin_token,
+        tenant: admin.tenant
+      }
+    end
+
+    test "can remove an admin when multiple admins exist", %{
+      conn: conn,
+      admin_token: token,
+      admin2: admin2
+    } do
+      # There are 2 admins, removing one should succeed
+      result =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> delete("/v1/tenant/users/#{admin2.id}")
+        |> json_response(200)
+
+      assert result["id"] == admin2.id
+    end
+
+    test "cannot remove yourself even as sole admin", %{
+      conn: conn,
+      admin: admin,
+      admin_token: admin_token,
+      admin2: admin2
+    } do
+      # First remove admin2 so admin is the only admin
+      conn
+      |> put_req_header("content-type", "application/json")
+      |> put_req_header("authorization", "Bearer #{admin_token}")
+      |> delete("/v1/tenant/users/#{admin2.id}")
+      |> json_response(200)
+
+      # Now admin is the only admin. admin tries to remove themselves.
+      # This should fail with "cannot remove self"
+      result =
+        build_conn()
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{admin_token}")
+        |> delete("/v1/tenant/users/#{admin.id}")
+        |> json_response(403)
+
+      assert result["message"] =~ "cannot remove yourself"
+    end
+
+    test "member cannot remove users", %{
+      conn: conn,
+      admin: admin,
+      tenant: tenant
+    } do
+      # Create a member
+      {:ok, unconfirmed_member} =
+        Users.create_user(tenant, %{
+          "email" => "member@admin-delete.com",
+          "password" => "secure_password_123",
+          "role" => "member"
+        })
+
+      {:ok, member} = Users.confirm_user(unconfirmed_member)
+      {:ok, member_token, _claims} = Token.generate_access_token(member)
+
+      # Member tries to remove admin - should fail with forbidden
+      result =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{member_token}")
+        |> delete("/v1/tenant/users/#{admin.id}")
+        |> json_response(403)
+
+      assert result["message"] =~ "permission"
+    end
   end
 end
