@@ -14,6 +14,20 @@ defmodule Ricqchet.Tenants.Tenant do
 
   @signing_secret_bytes 32
 
+  @type t :: %__MODULE__{
+          id: Ecto.UUID.t() | nil,
+          name: String.t() | nil,
+          status: String.t(),
+          default_max_retries: integer(),
+          signing_secret: binary() | nil,
+          messages: [Ricqchet.Messages.Message.t()] | Ecto.Association.NotLoaded.t(),
+          batches: [Ricqchet.Batches.Batch.t()] | Ecto.Association.NotLoaded.t(),
+          applications: [Ricqchet.Applications.Application.t()] | Ecto.Association.NotLoaded.t(),
+          users: [Ricqchet.Users.User.t()] | Ecto.Association.NotLoaded.t(),
+          inserted_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil
+        }
+
   schema "tenants" do
     field :name, :string
     field :status, :string, default: "active"

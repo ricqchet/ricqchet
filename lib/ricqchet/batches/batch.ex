@@ -19,6 +19,8 @@ defmodule Ricqchet.Batches.Batch do
   # failed: permanently failed (max retries exceeded)
   @statuses ~w(collecting pending dispatched delivered failed)
 
+  @type t :: %__MODULE__{}
+
   schema "batches" do
     field :batch_key, :string
     field :destination_url, :string

@@ -63,6 +63,10 @@ defmodule Ricqchet.MixProject do
 
       # Auth
       {:argon2_elixir, "~> 4.0"},
+      {:joken, "~> 2.6"},
+
+      # Email
+      {:swoosh, "~> 1.17"},
 
       # API Documentation
       {:open_api_spex, "~> 3.21"},

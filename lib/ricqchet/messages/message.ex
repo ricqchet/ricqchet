@@ -16,6 +16,8 @@ defmodule Ricqchet.Messages.Message do
 
   @statuses ~w(pending dispatched delivered failed)
 
+  @type t :: %__MODULE__{}
+
   schema "messages" do
     field :destination_url, :string
     field :method, :string, default: "POST"
