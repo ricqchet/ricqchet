@@ -45,7 +45,7 @@ defmodule Ricqchet.Auth do
         Tenants.create_tenant(tenant_attrs)
       end)
       |> Ecto.Multi.run(:user, fn _repo, %{tenant: tenant} ->
-        user_attrs = Map.merge(attrs, %{status: "pending", role: "admin"})
+        user_attrs = Map.merge(attrs, %{"status" => "pending", "role" => "admin"})
         Users.create_user(tenant, user_attrs)
       end)
       |> Ecto.Multi.run(:verification_token, fn _repo, %{user: user} ->
