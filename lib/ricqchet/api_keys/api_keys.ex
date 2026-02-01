@@ -90,6 +90,17 @@ defmodule Ricqchet.ApiKeys do
   end
 
   @doc """
+  Gets an API key by ID with preloaded application for ownership verification.
+
+  Returns the API key with application preloaded, or nil if not found.
+  """
+  def get_api_key_with_application(id) do
+    ApiKey
+    |> Repo.get(id)
+    |> Repo.preload(:application)
+  end
+
+  @doc """
   Revokes an API key.
   """
   def revoke_api_key(%ApiKey{} = api_key) do

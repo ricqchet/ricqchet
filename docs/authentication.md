@@ -188,30 +188,155 @@ curl -X POST "http://localhost:4000/v1/publish/https://example.com/webhook" \
 
 ## API Key Management
 
-### List Keys for an Application
+API keys can be managed via REST API endpoints (requires JWT authentication with admin role).
+
+### API Key Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: Create
+    Active --> Revoked: Revoke
+    Active --> Rotated: Rotate
+    Rotated --> Active: New Key
+    Rotated --> Revoked: Old Key
+    Revoked --> [*]
+```
+
+### Create API Key
+
+`POST /v1/applications/:application_id/api-keys`
+
+**Requires admin role.**
+
+```bash
+curl -X POST "http://localhost:4000/v1/applications/{app_id}/api-keys" \
+  -H "Authorization: Bearer <jwt_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Production Key"}'
+```
+
+Response (201 Created):
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Production Key",
+  "api_key": "rq_live_abc123def456...",
+  "prefix": "rq_live_a",
+  "status": "active",
+  "expires_at": null,
+  "created_at": "2026-01-31T15:30:00Z"
+}
+```
+
+> **Important:** The `api_key` field is only returned in this response. Store it securely - it cannot be retrieved again.
+
+### List API Keys
+
+`GET /v1/applications/:application_id/api-keys`
+
+```bash
+curl "http://localhost:4000/v1/applications/{app_id}/api-keys" \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+Response (200 OK):
+```json
+{
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Production Key",
+      "prefix": "rq_live_a",
+      "status": "active",
+      "last_used_at": "2026-01-31T14:00:00Z",
+      "expires_at": null,
+      "created_at": "2026-01-15T10:00:00Z"
+    }
+  ],
+  "meta": {"total": 1}
+}
+```
+
+> **Note:** The full API key is never returned in list responses - only the 8-character prefix for identification.
+
+### Revoke API Key
+
+`DELETE /v1/api-keys/:id`
+
+**Requires admin role.**
+
+```bash
+curl -X DELETE "http://localhost:4000/v1/api-keys/{key_id}" \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+Response (200 OK):
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Production Key",
+  "prefix": "rq_live_a",
+  "status": "revoked",
+  "revoked": true,
+  "revoked_at": "2026-01-31T15:30:00Z"
+}
+```
+
+> **Warning:** This action cannot be undone. Any requests using this key will immediately fail authentication.
+
+### Rotate API Key
+
+`POST /v1/api-keys/:id/rotate`
+
+**Requires admin role.**
+
+Atomically revokes the old key and creates a new one with the same name.
+
+```bash
+curl -X POST "http://localhost:4000/v1/api-keys/{key_id}/rotate" \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+Response (200 OK):
+```json
+{
+  "old_api_key": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Production Key",
+    "prefix": "rq_live_a",
+    "status": "revoked"
+  },
+  "new_api_key": {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "name": "Production Key",
+    "api_key": "rq_live_xyz789abc012...",
+    "prefix": "rq_live_x",
+    "status": "active",
+    "expires_at": null,
+    "created_at": "2026-01-31T15:30:00Z"
+  }
+}
+```
+
+> **Important:** The new `api_key` is only shown once. Update your applications with the new key before the rotation response is lost.
+
+### Programmatic API Key Management
+
+API keys can also be managed via Elixir functions:
 
 ```elixir
+alias Ricqchet.ApiKeys
+
+# List keys
 ApiKeys.list_api_keys_for_application(application)
-```
 
-### Revoke a Key
-
-```elixir
+# Revoke a key
 ApiKeys.revoke_api_key(api_key)
-```
 
-Revoked keys are immediately invalidated and cannot be used for authentication.
-
-### Rotate a Key
-
-```elixir
+# Rotate a key
 {:ok, new_api_key} = ApiKeys.rotate_api_key(old_api_key)
-
-# The old key is revoked, save the new one
 IO.puts("New API Key: #{new_api_key.api_key}")
 ```
-
-Rotation atomically revokes the old key and creates a new one with the same name.
 
 ## Key Expiration
 

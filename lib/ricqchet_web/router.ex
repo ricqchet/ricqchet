@@ -62,6 +62,15 @@ defmodule RicqchetWeb.Router do
 
     resources "/applications", ApplicationController,
       only: [:index, :show, :create, :update, :delete]
+
+    # API key management (nested under applications for create/list)
+    resources "/applications", ApplicationController, only: [] do
+      resources "/api-keys", ApiKeyController, only: [:index, :create]
+    end
+
+    # API key operations (revoke and rotate use direct key ID)
+    delete "/api-keys/:id", ApiKeyController, :delete
+    post "/api-keys/:id/rotate", ApiKeyController, :rotate
   end
 
   # API v1 endpoints (API key auth required for relay operations)
