@@ -49,7 +49,7 @@ defmodule RicqchetWeb.ApiKeyJSON do
         id: old_key.id,
         name: old_key.name,
         prefix: old_key.api_key_prefix,
-        status: "revoked"
+        status: old_key.status
       },
       new_api_key: %{
         id: new_key.id,

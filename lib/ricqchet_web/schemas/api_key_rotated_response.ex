@@ -86,14 +86,14 @@ defmodule RicqchetWeb.Schemas.ApiKeyRotatedResponse do
       old_api_key: %{
         id: "550e8400-e29b-41d4-a716-446655440000",
         name: "Production Key",
-        prefix: "rq_live_a",
+        prefix: "rq_live_",
         status: "revoked"
       },
       new_api_key: %{
         id: "660e8400-e29b-41d4-a716-446655440001",
         name: "Production Key",
         api_key: "rq_live_xyz789abc012def345ghi678jkl901mno234pqr567",
-        prefix: "rq_live_x",
+        prefix: "rq_live_",
         status: "active",
         expires_at: nil,
         created_at: "2026-01-31T15:30:00Z"

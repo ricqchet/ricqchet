@@ -195,8 +195,8 @@ defmodule RicqchetWeb.ApiKeyController do
 
     with :ok <- authorize_admin(user),
          {:ok, api_key} <- get_api_key_or_error(tenant, id),
-         {:ok, new_api_key} <- ApiKeys.rotate_api_key(api_key) do
-      render(conn, :rotated, old_api_key: api_key, new_api_key: new_api_key)
+         {:ok, {revoked_key, new_api_key}} <- ApiKeys.rotate_api_key(api_key) do
+      render(conn, :rotated, old_api_key: revoked_key, new_api_key: new_api_key)
     end
   end
 

@@ -221,7 +221,7 @@ Response (201 Created):
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "Production Key",
   "api_key": "rq_live_abc123def456...",
-  "prefix": "rq_live_a",
+  "prefix": "rq_live_",
   "status": "active",
   "expires_at": null,
   "created_at": "2026-01-31T15:30:00Z"
@@ -246,7 +246,7 @@ Response (200 OK):
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "name": "Production Key",
-      "prefix": "rq_live_a",
+      "prefix": "rq_live_",
       "status": "active",
       "last_used_at": "2026-01-31T14:00:00Z",
       "expires_at": null,
@@ -275,7 +275,7 @@ Response (200 OK):
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "Production Key",
-  "prefix": "rq_live_a",
+  "prefix": "rq_live_",
   "status": "revoked",
   "revoked": true,
   "revoked_at": "2026-01-31T15:30:00Z"
@@ -303,14 +303,14 @@ Response (200 OK):
   "old_api_key": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "name": "Production Key",
-    "prefix": "rq_live_a",
+    "prefix": "rq_live_",
     "status": "revoked"
   },
   "new_api_key": {
     "id": "660e8400-e29b-41d4-a716-446655440001",
     "name": "Production Key",
     "api_key": "rq_live_xyz789abc012...",
-    "prefix": "rq_live_x",
+    "prefix": "rq_live_",
     "status": "active",
     "expires_at": null,
     "created_at": "2026-01-31T15:30:00Z"
