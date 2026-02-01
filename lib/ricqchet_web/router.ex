@@ -5,6 +5,10 @@ defmodule RicqchetWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :openapi do
+    plug OpenApiSpex.Plug.PutApiSpec, module: RicqchetWeb.ApiSpec
+  end
+
   pipeline :authenticated do
     plug RicqchetWeb.Plugs.Authenticate
     plug RicqchetWeb.Plugs.RateLimiter
@@ -24,9 +28,9 @@ defmodule RicqchetWeb.Router do
 
   # OpenAPI documentation endpoints
   scope "/api" do
-    pipe_through :api
+    pipe_through [:api, :openapi]
 
-    get "/openapi", OpenApiSpex.Plug.RenderSpec, spec: RicqchetWeb.ApiSpec
+    get "/openapi", OpenApiSpex.Plug.RenderSpec, []
     get "/docs", OpenApiSpex.Plug.SwaggerUI, path: "/api/openapi"
   end
 
