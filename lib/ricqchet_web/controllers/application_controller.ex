@@ -89,6 +89,22 @@ defmodule RicqchetWeb.ApplicationController do
         in: :query,
         schema: %Schema{type: :array, items: %Schema{type: :string, enum: ~w(asc desc)}},
         description: "Sort directions for each order_by field"
+      ],
+      filters: [
+        in: :query,
+        schema: %Schema{
+          type: :array,
+          items: %Schema{
+            type: :object,
+            properties: %{
+              field: %Schema{type: :string, enum: ~w(name status)},
+              op: %Schema{type: :string, enum: ~w(== != =~ ilike like empty not_empty)},
+              value: %Schema{type: :string}
+            }
+          }
+        },
+        description:
+          "Array of filters, e.g. filters[0][field]=name&filters[0][op]=ilike&filters[0][value]=prod"
       ]
     ],
     responses: Schemas.Helpers.list_responses(Schemas.ApplicationList, [401, 422, 429]),

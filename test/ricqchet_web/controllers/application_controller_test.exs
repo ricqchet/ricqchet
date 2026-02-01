@@ -121,7 +121,7 @@ defmodule RicqchetWeb.ApplicationControllerTest do
     test "supports cursor-based pagination with first param", %{conn: conn, tenant: tenant} do
       # Create additional applications
       for i <- 1..5 do
-        Applications.create_application(tenant, %{name: "App #{i}"})
+        {:ok, _} = Applications.create_application(tenant, %{name: "App #{i}"})
       end
 
       conn = get(conn, "/v1/applications", %{first: 2})
@@ -135,7 +135,7 @@ defmodule RicqchetWeb.ApplicationControllerTest do
     test "supports forward pagination with after cursor", %{conn: conn, tenant: tenant} do
       # Create additional applications
       for i <- 1..5 do
-        Applications.create_application(tenant, %{name: "App #{i}"})
+        {:ok, _} = Applications.create_application(tenant, %{name: "App #{i}"})
       end
 
       # Get first page
@@ -164,7 +164,7 @@ defmodule RicqchetWeb.ApplicationControllerTest do
     test "supports backward pagination with last/before cursor", %{conn: conn, tenant: tenant} do
       # Create additional applications
       for i <- 1..5 do
-        Applications.create_application(tenant, %{name: "App #{i}"})
+        {:ok, _} = Applications.create_application(tenant, %{name: "App #{i}"})
       end
 
       [auth_header] = get_req_header(conn, "authorization")
@@ -195,7 +195,7 @@ defmodule RicqchetWeb.ApplicationControllerTest do
     test "supports offset-based pagination", %{conn: conn, tenant: tenant} do
       # Create additional applications
       for i <- 1..5 do
-        Applications.create_application(tenant, %{name: "App #{i}"})
+        {:ok, _} = Applications.create_application(tenant, %{name: "App #{i}"})
       end
 
       conn = get(conn, "/v1/applications", %{offset: 2, limit: 2})
@@ -211,22 +211,24 @@ defmodule RicqchetWeb.ApplicationControllerTest do
       {:ok, active_app} = Applications.create_application(tenant, %{name: "Active App"})
       {:ok, suspended_app} = Applications.create_application(tenant, %{name: "Suspended App"})
 
-      Applications.update_application(suspended_app, %{status: "suspended"})
+      {:ok, _} = Applications.update_application(suspended_app, %{status: "suspended"})
 
       # Filter for active only using query string format
       conn = get(conn, "/v1/applications?filters[0][field]=status&filters[0][value]=active")
 
       response = json_response(conn, 200)
       statuses = Enum.map(response["data"], & &1["status"])
+      result_ids = Enum.map(response["data"], & &1["id"])
       assert Enum.all?(statuses, &(&1 == "active"))
-      assert active_app.id in Enum.map(response["data"], & &1["id"])
+      assert active_app.id in result_ids
+      refute suspended_app.id in result_ids
     end
 
     test "supports sorting by name", %{conn: conn, tenant: tenant} do
       # Create applications with specific names
-      Applications.create_application(tenant, %{name: "Zebra"})
-      Applications.create_application(tenant, %{name: "Apple"})
-      Applications.create_application(tenant, %{name: "Mango"})
+      {:ok, _} = Applications.create_application(tenant, %{name: "Zebra"})
+      {:ok, _} = Applications.create_application(tenant, %{name: "Apple"})
+      {:ok, _} = Applications.create_application(tenant, %{name: "Mango"})
 
       conn =
         get(conn, "/v1/applications", %{
@@ -241,6 +243,13 @@ defmodule RicqchetWeb.ApplicationControllerTest do
 
     test "returns validation error for invalid pagination params", %{conn: conn} do
       conn = get(conn, "/v1/applications", %{limit: 1000})
+
+      response = json_response(conn, 422)
+      assert response["error"] == "validation_error"
+    end
+
+    test "handles invalid string values in pagination params gracefully", %{conn: conn} do
+      conn = get(conn, "/v1/applications?first=abc")
 
       response = json_response(conn, 422)
       assert response["error"] == "validation_error"
