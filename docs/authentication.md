@@ -1,6 +1,130 @@
 # Authentication
 
-Ricqchet uses a multi-tenant architecture with API key authentication.
+Ricqchet supports two authentication methods:
+
+1. **API Key Authentication** - For programmatic access to relay endpoints (publishing messages)
+2. **JWT Authentication** - For user access to management endpoints (user accounts, settings)
+
+## JWT Authentication (Management API)
+
+User accounts authenticate via JWT tokens to access management endpoints like user profile, password changes, and (future) application management.
+
+### Registration
+
+Create a new account with an organization (tenant):
+
+```bash
+curl -X POST "http://localhost:4000/v1/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "secure_password_123",
+    "tenant_name": "My Organization"
+  }'
+```
+
+A verification email will be sent. Users must verify their email before logging in.
+
+### Email Verification
+
+Verify email using the token from the verification email:
+
+```bash
+curl -X POST "http://localhost:4000/v1/auth/verify-email" \
+  -H "Content-Type: application/json" \
+  -d '{"token": "verification_token_from_email"}'
+```
+
+### Login
+
+Authenticate and receive access and refresh tokens:
+
+```bash
+curl -X POST "http://localhost:4000/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "secure_password_123"
+  }'
+```
+
+Response:
+```json
+{
+  "user": {
+    "id": "...",
+    "email": "user@example.com",
+    "role": "admin",
+    "status": "active",
+    "tenant_id": "...",
+    "tenant_name": "My Organization"
+  },
+  "access_token": "eyJ...",
+  "refresh_token": "...",
+  "expires_in": 900
+}
+```
+
+### Using JWT Tokens
+
+Include the access token in the `Authorization` header for protected endpoints:
+
+```bash
+curl "http://localhost:4000/v1/users/me" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+### Token Refresh
+
+Access tokens expire after 15 minutes. Use the refresh token to get a new access token:
+
+```bash
+curl -X POST "http://localhost:4000/v1/auth/refresh" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "..."}'
+```
+
+### Logout
+
+Revoke a refresh token:
+
+```bash
+curl -X POST "http://localhost:4000/v1/auth/logout" \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "..."}'
+```
+
+To logout from all sessions, add `"everywhere": true` to the request body.
+
+### Change Password
+
+Change your password (invalidates all existing sessions):
+
+```bash
+curl -X POST "http://localhost:4000/v1/auth/change-password" \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "current_password": "old_password",
+    "new_password": "new_secure_password_456"
+  }'
+```
+
+New tokens are returned for the current session.
+
+### JWT Security
+
+- Access tokens expire in 15 minutes
+- Refresh tokens expire in 7 days
+- Password changes invalidate all existing tokens
+- Tokens include a version number that's checked against the user's current version
+
+---
+
+## API Key Authentication (Relay API)
+
+API keys are used for programmatic access to message relay endpoints.
 
 ## Architecture
 
