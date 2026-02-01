@@ -151,6 +151,8 @@ alias Ricqchet.Tenants
 
 ### 2. Create an Application
 
+Applications can be created via the API (see [Applications](applications.md)) or programmatically:
+
 ```elixir
 alias Ricqchet.Applications
 

@@ -56,6 +56,14 @@ defmodule RicqchetWeb.Router do
     get "/me", UserController, :show
   end
 
+  # Application management (JWT auth required, role-based access)
+  scope "/v1", RicqchetWeb do
+    pipe_through [:api, :jwt_authenticated]
+
+    resources "/applications", ApplicationController,
+      only: [:index, :show, :create, :update, :delete]
+  end
+
   # API v1 endpoints (API key auth required for relay operations)
   scope "/v1", RicqchetWeb do
     pipe_through [:api, :authenticated]
