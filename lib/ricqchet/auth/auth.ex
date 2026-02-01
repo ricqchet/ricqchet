@@ -224,7 +224,10 @@ defmodule Ricqchet.Auth do
   def request_password_reset(email) when is_binary(email) do
     case Users.get_user_by_email(email) do
       nil ->
-        # Return success to prevent email enumeration
+        # Perform dummy token generation to prevent timing attacks
+        # This ensures both paths take similar time
+        _ = PasswordResetToken.generate_token()
+        _ = PasswordResetToken.hash_token("dummy")
         {:ok, nil}
 
       user ->

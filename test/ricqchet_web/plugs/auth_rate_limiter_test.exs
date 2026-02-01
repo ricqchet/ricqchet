@@ -10,15 +10,15 @@ defmodule RicqchetWeb.Plugs.AuthRateLimiterTest do
   end
 
   describe "rate limiting" do
-    test "allows requests under the limit", %{conn: conn} do
+    test "allows requests under the limit", %{conn: _conn} do
       # Default is 5 requests per minute
       for _ <- 1..5 do
-        conn =
-          conn
+        response_conn =
+          build_conn()
           |> put_req_header("content-type", "application/json")
           |> post("/v1/auth/forgot-password", %{email: "test@example.com"})
 
-        assert conn.status == 200
+        assert response_conn.status == 200
       end
     end
 

@@ -11,7 +11,8 @@ defmodule RicqchetWeb.Plugs.AuthRateLimiter do
 
       config :ricqchet, RicqchetWeb.Plugs.AuthRateLimiter,
         requests_per_minute: 5,
-        window_ms: 60_000
+        window_ms: 60_000,
+        trust_x_forwarded_for: true  # Only enable when behind a trusted reverse proxy
 
   ## Usage
 
@@ -67,7 +68,12 @@ defmodule RicqchetWeb.Plugs.AuthRateLimiter do
   defp ensure_table_exists do
     case :ets.whereis(@table_name) do
       :undefined ->
-        :ets.new(@table_name, [:named_table, :public, :set, {:write_concurrency, true}])
+        try do
+          :ets.new(@table_name, [:named_table, :public, :set, {:write_concurrency, true}])
+        catch
+          # Handle race condition where another process created the table first
+          :error, :badarg -> :ok
+        end
 
       _ ->
         :ok
@@ -93,14 +99,23 @@ defmodule RicqchetWeb.Plugs.AuthRateLimiter do
   end
 
   defp get_client_ip(conn) do
-    # Check for X-Forwarded-For header (for reverse proxies)
-    case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
-      [forwarded | _] ->
-        parse_forwarded_ip(forwarded, conn.remote_ip)
+    if trust_x_forwarded_for?() do
+      # Check for X-Forwarded-For header (for reverse proxies)
+      case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
+        [forwarded | _] ->
+          parse_forwarded_ip(forwarded, conn.remote_ip)
 
-      [] ->
-        conn.remote_ip
+        [] ->
+          conn.remote_ip
+      end
+    else
+      conn.remote_ip
     end
+  end
+
+  defp trust_x_forwarded_for? do
+    config = Application.get_env(:ricqchet, __MODULE__, [])
+    Keyword.get(config, :trust_x_forwarded_for, false)
   end
 
   defp parse_forwarded_ip(forwarded, fallback_ip) do

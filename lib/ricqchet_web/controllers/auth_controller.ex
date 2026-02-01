@@ -145,25 +145,19 @@ defmodule RicqchetWeb.AuthController do
     case Auth.request_password_reset(email) do
       {:ok, nil} ->
         # Email doesn't exist, but we return success to prevent enumeration
-        conn
-        |> put_status(:ok)
-        |> render(:message,
-          message: "If an account exists with that email, a password reset link has been sent"
-        )
+        render_password_reset_response(conn)
 
       {:ok, %{user: user, reset_token: token}} ->
-        # Send password reset email
+        # Send password reset email with error handling to prevent crashes
         reset_url = build_reset_url(token)
+        send_password_reset_email(user.email, reset_url)
+        render_password_reset_response(conn)
 
-        user.email
-        |> Email.password_reset_email(reset_url)
-        |> Mailer.deliver()
-
-        conn
-        |> put_status(:ok)
-        |> render(:message,
-          message: "If an account exists with that email, a password reset link has been sent"
-        )
+      {:error, _reason} ->
+        # Log the error but still return success to prevent enumeration
+        require Logger
+        Logger.error("Failed to create password reset token for email")
+        render_password_reset_response(conn)
     end
   end
 
@@ -171,6 +165,25 @@ defmodule RicqchetWeb.AuthController do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{error: "validation_error", message: "Email is required"})
+  end
+
+  defp send_password_reset_email(email, reset_url) do
+    email
+    |> Email.password_reset_email(reset_url)
+    |> Mailer.deliver()
+  rescue
+    error ->
+      require Logger
+      Logger.error("Failed to send password reset email: #{inspect(error)}")
+      :error
+  end
+
+  defp render_password_reset_response(conn) do
+    conn
+    |> put_status(:ok)
+    |> render(:message,
+      message: "If an account exists with that email, a password reset link has been sent"
+    )
   end
 
   operation(:reset_password,

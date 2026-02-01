@@ -44,7 +44,6 @@ defmodule RicqchetWeb.Router do
 
     post "/register", AuthController, :register
     post "/verify-email", AuthController, :verify_email
-    post "/reset-password", AuthController, :reset_password
     post "/login", AuthController, :login
     post "/refresh", AuthController, :refresh
   end
@@ -54,6 +53,7 @@ defmodule RicqchetWeb.Router do
     pipe_through [:api, :auth_rate_limited]
 
     post "/forgot-password", AuthController, :forgot_password
+    post "/reset-password", AuthController, :reset_password
   end
 
   # Protected auth endpoints (JWT auth required)
