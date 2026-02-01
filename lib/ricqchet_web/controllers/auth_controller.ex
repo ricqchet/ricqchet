@@ -238,6 +238,53 @@ defmodule RicqchetWeb.AuthController do
     |> json(%{error: "validation_error", message: "Refresh token is required"})
   end
 
+  operation(:change_password,
+    summary: "Change password",
+    description: """
+    Changes the user's password. Requires the current password for verification.
+    After a successful password change, all existing sessions are invalidated and
+    new tokens are returned for the current session.
+    """,
+    security: [%{"bearerAuth" => []}],
+    request_body:
+      {"Password change details", "application/json", Schemas.Auth.ChangePasswordRequest,
+       required: true},
+    responses: %{
+      200 => {"Password changed", "application/json", Schemas.Auth.LoginResponse},
+      401 => {"Invalid current password", "application/json", Schemas.ErrorResponse},
+      422 => {"Validation error", "application/json", Schemas.ErrorResponse}
+    }
+  )
+
+  @doc """
+  Changes the user's password.
+  """
+  def change_password(conn, %{"current_password" => current, "new_password" => new}) do
+    user = conn.assigns.current_user
+
+    case Auth.change_password(user, current, new) do
+      {:ok, auth_data} ->
+        conn
+        |> put_status(:ok)
+        |> render(:logged_in, auth_data)
+
+      {:error, :invalid_current_password} ->
+        {:error, :unauthorized, "Current password is incorrect"}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  def change_password(conn, _params) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{
+      error: "validation_error",
+      message: "Current password and new password are required"
+    })
+  end
+
   defp build_verification_url(token) do
     base_url = Application.get_env(:ricqchet, :frontend_url, "http://localhost:4000")
     "#{base_url}/verify-email?token=#{token}"
