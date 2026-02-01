@@ -78,6 +78,13 @@ defmodule RicqchetWeb.FallbackController do
     |> render(:error, error: "bad_request", message: message)
   end
 
+  def call(conn, {:error, :unauthorized, message}) do
+    conn
+    |> put_status(:unauthorized)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error, error: "unauthorized", message: message)
+  end
+
   # Handle Multi transaction errors (e.g., from Auth.register_user)
   def call(conn, {:error, _step, %Ecto.Changeset{} = changeset}) do
     call(conn, {:error, changeset})
