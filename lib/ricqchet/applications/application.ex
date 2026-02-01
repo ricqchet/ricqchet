@@ -14,6 +14,16 @@ defmodule Ricqchet.Applications.Application do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
+  @derive {
+    Flop.Schema,
+    filterable: [:name, :status],
+    sortable: [:name, :status, :inserted_at, :updated_at],
+    default_order: %{
+      order_by: [:inserted_at],
+      order_directions: [:desc]
+    }
+  }
+
   @type t :: %__MODULE__{}
 
   schema "applications" do

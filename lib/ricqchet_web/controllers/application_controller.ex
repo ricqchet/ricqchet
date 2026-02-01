@@ -27,24 +27,89 @@ defmodule RicqchetWeb.ApplicationController do
 
   operation(:index,
     summary: "List applications",
-    description:
-      "Returns a list of all applications in the current tenant. Requires JWT authentication.",
-    responses: Schemas.Helpers.list_responses(Schemas.ApplicationList),
+    description: """
+    Returns a paginated list of applications in the current tenant.
+
+    Supports cursor-based pagination (recommended for large datasets):
+    - `first` + optional `after` cursor for forward pagination
+    - `last` + optional `before` cursor for backward pagination
+
+    Or offset-based pagination:
+    - `offset` + `limit`
+
+    **Filtering:**
+    - `filters[0][field]=name&filters[0][op]=ilike&filters[0][value]=prod`
+    - `filters[0][field]=status&filters[0][value]=active`
+
+    **Sorting:**
+    - `order_by[]=name&order_directions[]=asc`
+
+    Requires JWT authentication.
+    """,
+    parameters: [
+      first: [
+        in: :query,
+        schema: %Schema{type: :integer, minimum: 1, maximum: 100},
+        description: "Number of items to return (forward pagination)"
+      ],
+      after: [
+        in: :query,
+        schema: %Schema{type: :string},
+        description: "Cursor for forward pagination (from previous response)"
+      ],
+      last: [
+        in: :query,
+        schema: %Schema{type: :integer, minimum: 1, maximum: 100},
+        description: "Number of items to return (backward pagination)"
+      ],
+      before: [
+        in: :query,
+        schema: %Schema{type: :string},
+        description: "Cursor for backward pagination (from previous response)"
+      ],
+      offset: [
+        in: :query,
+        schema: %Schema{type: :integer, minimum: 0},
+        description: "Offset for offset-based pagination"
+      ],
+      limit: [
+        in: :query,
+        schema: %Schema{type: :integer, minimum: 1, maximum: 100},
+        description: "Number of items to return (offset pagination)"
+      ],
+      order_by: [
+        in: :query,
+        schema: %Schema{
+          type: :array,
+          items: %Schema{type: :string, enum: ~w(name status inserted_at updated_at)}
+        },
+        description: "Fields to sort by"
+      ],
+      order_directions: [
+        in: :query,
+        schema: %Schema{type: :array, items: %Schema{type: :string, enum: ~w(asc desc)}},
+        description: "Sort directions for each order_by field"
+      ]
+    ],
+    responses: Schemas.Helpers.list_responses(Schemas.ApplicationList, [401, 422, 429]),
     security: [%{"bearer_auth" => []}]
   )
 
   @doc """
-  Lists all applications for the current tenant.
+  Lists applications for the current tenant with pagination.
   """
-  def index(conn, _params) do
+  def index(conn, params) do
     tenant = conn.assigns.current_tenant
+    flop_params = extract_flop_params(params)
 
-    applications =
-      tenant
-      |> Applications.list_applications_for_tenant()
-      |> Repo.preload(:api_keys)
+    case Applications.list_applications_for_tenant(tenant, flop_params) do
+      {:ok, {applications, meta}} ->
+        applications = Repo.preload(applications, :api_keys)
+        render(conn, :index, applications: applications, meta: meta)
 
-    render(conn, :index, applications: applications, total: length(applications))
+      {:error, meta} ->
+        {:error, :validation, flop_errors_to_map(meta)}
+    end
   end
 
   operation(:show,
@@ -251,6 +316,57 @@ defmodule RicqchetWeb.ApplicationController do
         {:ok, _} -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, reason}}
       end
+    end)
+  end
+
+  # Flop parameter helpers
+
+  @flop_keys ~w(first after last before offset limit order_by order_directions filters)
+
+  defp extract_flop_params(params) do
+    params
+    |> Map.take(@flop_keys)
+    |> maybe_convert_pagination_values()
+  end
+
+  defp maybe_convert_pagination_values(params) do
+    params
+    |> maybe_convert_to_integer("first")
+    |> maybe_convert_to_integer("last")
+    |> maybe_convert_to_integer("offset")
+    |> maybe_convert_to_integer("limit")
+  end
+
+  defp maybe_convert_to_integer(params, key) do
+    case Map.get(params, key) do
+      nil -> params
+      value when is_integer(value) -> params
+      value when is_binary(value) -> Map.put(params, key, String.to_integer(value))
+    end
+  end
+
+  defp flop_errors_to_map(%Flop.Meta{errors: errors}) do
+    Enum.map_join(errors, "; ", fn
+      {field, {message, opts}} -> format_error(field, message, opts)
+      {field, messages} when is_list(messages) -> format_error_list(field, messages)
+    end)
+  end
+
+  defp format_error(field, message, opts) do
+    formatted_message = format_message(message, opts)
+    "#{field}: #{formatted_message}"
+  end
+
+  defp format_error_list(field, messages) do
+    formatted =
+      Enum.map_join(messages, ", ", fn {message, opts} -> format_message(message, opts) end)
+
+    "#{field}: #{formatted}"
+  end
+
+  defp format_message(message, opts) do
+    Enum.reduce(opts, message, fn {key, value}, acc ->
+      String.replace(acc, "%{#{key}}", to_string(value))
     end)
   end
 end

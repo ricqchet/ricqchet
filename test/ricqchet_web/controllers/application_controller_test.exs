@@ -117,6 +117,103 @@ defmodule RicqchetWeb.ApplicationControllerTest do
       response = json_response(conn, 200)
       assert is_list(response["data"])
     end
+
+    test "supports cursor-based pagination with first param", %{conn: conn, tenant: tenant} do
+      # Create additional applications
+      for i <- 1..5 do
+        Applications.create_application(tenant, %{name: "App #{i}"})
+      end
+
+      conn = get(conn, "/v1/applications", %{first: 2})
+
+      response = json_response(conn, 200)
+      assert length(response["data"]) == 2
+      assert response["meta"]["has_next_page"] == true
+      assert response["meta"]["end_cursor"] != nil
+    end
+
+    test "supports forward pagination with after cursor", %{conn: conn, tenant: tenant} do
+      # Create additional applications
+      for i <- 1..5 do
+        Applications.create_application(tenant, %{name: "App #{i}"})
+      end
+
+      # Get first page
+      conn1 = get(conn, "/v1/applications", %{first: 2})
+      response1 = json_response(conn1, 200)
+      end_cursor = response1["meta"]["end_cursor"]
+
+      # Get second page using cursor
+      [auth_header] = get_req_header(conn, "authorization")
+
+      conn2 =
+        build_conn()
+        |> put_req_header("authorization", auth_header)
+        |> get("/v1/applications", %{first: 2, after: end_cursor})
+
+      response2 = json_response(conn2, 200)
+      assert length(response2["data"]) == 2
+      assert response2["meta"]["has_previous_page"] == true
+
+      # Ensure no overlap between pages
+      ids1 = MapSet.new(response1["data"], & &1["id"])
+      ids2 = MapSet.new(response2["data"], & &1["id"])
+      assert MapSet.disjoint?(ids1, ids2)
+    end
+
+    test "supports offset-based pagination", %{conn: conn, tenant: tenant} do
+      # Create additional applications
+      for i <- 1..5 do
+        Applications.create_application(tenant, %{name: "App #{i}"})
+      end
+
+      conn = get(conn, "/v1/applications", %{offset: 2, limit: 2})
+
+      response = json_response(conn, 200)
+      assert length(response["data"]) == 2
+      assert response["meta"]["current_offset"] == 2
+      assert response["meta"]["total_pages"] != nil
+    end
+
+    test "supports filtering by status", %{conn: conn, tenant: tenant} do
+      # Create applications with different statuses
+      {:ok, active_app} = Applications.create_application(tenant, %{name: "Active App"})
+      {:ok, suspended_app} = Applications.create_application(tenant, %{name: "Suspended App"})
+
+      Applications.update_application(suspended_app, %{status: "suspended"})
+
+      # Filter for active only using query string format
+      conn = get(conn, "/v1/applications?filters[0][field]=status&filters[0][value]=active")
+
+      response = json_response(conn, 200)
+      statuses = Enum.map(response["data"], & &1["status"])
+      assert Enum.all?(statuses, &(&1 == "active"))
+      assert active_app.id in Enum.map(response["data"], & &1["id"])
+    end
+
+    test "supports sorting by name", %{conn: conn, tenant: tenant} do
+      # Create applications with specific names
+      Applications.create_application(tenant, %{name: "Zebra"})
+      Applications.create_application(tenant, %{name: "Apple"})
+      Applications.create_application(tenant, %{name: "Mango"})
+
+      conn =
+        get(conn, "/v1/applications", %{
+          "order_by" => ["name"],
+          "order_directions" => ["asc"]
+        })
+
+      response = json_response(conn, 200)
+      names = Enum.map(response["data"], & &1["name"])
+      assert names == Enum.sort(names)
+    end
+
+    test "returns validation error for invalid pagination params", %{conn: conn} do
+      conn = get(conn, "/v1/applications", %{limit: 1000})
+
+      response = json_response(conn, 422)
+      assert response["error"] == "validation_error"
+    end
   end
 
   describe "show/2" do

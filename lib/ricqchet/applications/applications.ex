@@ -9,6 +9,8 @@ defmodule Ricqchet.Applications do
   alias Ricqchet.Repo
   alias Ricqchet.Tenants.Tenant
 
+  @type flop_result :: {:ok, {[Application.t()], Flop.Meta.t()}} | {:error, Flop.Meta.t()}
+
   @doc """
   Creates a new application for a tenant.
 
@@ -46,13 +48,34 @@ defmodule Ricqchet.Applications do
   end
 
   @doc """
-  Lists all applications for a tenant.
+  Lists applications for a tenant with pagination, filtering, and sorting.
+
+  Accepts Flop parameters for cursor-based pagination:
+  - `first` / `after` - Forward cursor pagination
+  - `last` / `before` - Backward cursor pagination
+  - `offset` / `limit` - Offset-based pagination
+
+  Filtering:
+  - `filters` - List of filter conditions (field, op, value)
+
+  Sorting:
+  - `order_by` - List of fields to sort by
+  - `order_directions` - List of sort directions (:asc, :desc)
+
+  ## Examples
+
+      iex> list_applications_for_tenant(tenant, %{first: 10})
+      {:ok, {[%Application{}, ...], %Flop.Meta{}}}
+
+      iex> list_applications_for_tenant(tenant, %{filters: [%{field: :status, value: "active"}]})
+      {:ok, {[%Application{}, ...], %Flop.Meta{}}}
+
   """
-  def list_applications_for_tenant(%Tenant{id: tenant_id}) do
+  @spec list_applications_for_tenant(Tenant.t(), map()) :: flop_result()
+  def list_applications_for_tenant(%Tenant{id: tenant_id}, params \\ %{}) do
     Application
     |> where([a], a.tenant_id == ^tenant_id)
-    |> order_by([a], desc: a.inserted_at)
-    |> Repo.all()
+    |> Flop.validate_and_run(params, for: Application)
   end
 
   @doc """

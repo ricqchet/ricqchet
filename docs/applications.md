@@ -25,12 +25,59 @@ All application endpoints require authentication via Bearer token.
 GET /v1/applications
 ```
 
-Returns all applications for the current tenant.
+Returns a paginated list of applications for the current tenant.
 
-**Example:**
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `first` | integer | Number of items to return (forward cursor pagination, max 100) |
+| `after` | string | Cursor for forward pagination (from previous response's `end_cursor`) |
+| `last` | integer | Number of items to return (backward cursor pagination, max 100) |
+| `before` | string | Cursor for backward pagination (from previous response's `start_cursor`) |
+| `offset` | integer | Offset for offset-based pagination |
+| `limit` | integer | Number of items to return (offset pagination, max 100) |
+| `order_by[]` | string | Fields to sort by: `name`, `status`, `inserted_at`, `updated_at` |
+| `order_directions[]` | string | Sort directions: `asc`, `desc` |
+| `filters[n][field]` | string | Field to filter on: `name`, `status` |
+| `filters[n][op]` | string | Filter operator (optional, default: `==`) |
+| `filters[n][value]` | string | Filter value |
+
+**Pagination Styles:**
+
+1. **Cursor-based (recommended):** Use `first`/`after` for forward pagination or `last`/`before` for backward pagination
+2. **Offset-based:** Use `offset`/`limit` for traditional pagination
+
+**Example - Basic:**
 
 ```bash
 curl "http://localhost:4000/v1/applications" \
+  -H "Authorization: Bearer <api_key>"
+```
+
+**Example - Cursor pagination:**
+
+```bash
+# First page
+curl "http://localhost:4000/v1/applications?first=10" \
+  -H "Authorization: Bearer <api_key>"
+
+# Next page (using end_cursor from previous response)
+curl "http://localhost:4000/v1/applications?first=10&after=g3QAAAABZAALaW5zZXJ0..." \
+  -H "Authorization: Bearer <api_key>"
+```
+
+**Example - Filter by status:**
+
+```bash
+curl "http://localhost:4000/v1/applications?filters[0][field]=status&filters[0][value]=active" \
+  -H "Authorization: Bearer <api_key>"
+```
+
+**Example - Sort by name:**
+
+```bash
+curl "http://localhost:4000/v1/applications?order_by[]=name&order_directions[]=asc" \
   -H "Authorization: Bearer <api_key>"
 ```
 
@@ -51,10 +98,27 @@ curl "http://localhost:4000/v1/applications" \
     }
   ],
   "meta": {
-    "total": 1
+    "total": 42,
+    "has_next_page": true,
+    "has_previous_page": false,
+    "start_cursor": null,
+    "end_cursor": "g3QAAAABZAALaW5zZXJ0ZWRfYXR0AAAADQ"
   }
 }
 ```
+
+**Response metadata fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total` | integer | Total number of applications matching the query |
+| `has_next_page` | boolean | Whether there are more items after the current page |
+| `has_previous_page` | boolean | Whether there are more items before the current page |
+| `start_cursor` | string | Cursor for the first item (use with `before` for backward pagination) |
+| `end_cursor` | string | Cursor for the last item (use with `after` for forward pagination) |
+| `current_offset` | integer | Current offset (only with offset-based pagination) |
+| `current_page` | integer | Current page number (only with offset-based pagination) |
+| `total_pages` | integer | Total number of pages (only with offset-based pagination) |
 
 ### Get Application
 

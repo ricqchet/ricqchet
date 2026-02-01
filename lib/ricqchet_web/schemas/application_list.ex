@@ -7,7 +7,7 @@ defmodule RicqchetWeb.Schemas.ApplicationList do
 
   OpenApiSpex.schema(%{
     title: "ApplicationList",
-    description: "Paginated list of applications",
+    description: "Paginated list of applications with cursor-based pagination support",
     type: :object,
     required: [:data, :meta],
     properties: %{
@@ -18,12 +18,47 @@ defmodule RicqchetWeb.Schemas.ApplicationList do
       },
       meta: %Schema{
         type: :object,
-        required: [:total],
+        required: [:total, :has_next_page, :has_previous_page],
         properties: %{
           total: %Schema{
             type: :integer,
             minimum: 0,
-            description: "Total number of applications"
+            description: "Total number of applications matching the query"
+          },
+          has_next_page: %Schema{
+            type: :boolean,
+            description: "Whether there are more items after the current page"
+          },
+          has_previous_page: %Schema{
+            type: :boolean,
+            description: "Whether there are more items before the current page"
+          },
+          start_cursor: %Schema{
+            type: :string,
+            nullable: true,
+            description:
+              "Cursor for the first item in the current page (use with 'before' for backward pagination)"
+          },
+          end_cursor: %Schema{
+            type: :string,
+            nullable: true,
+            description:
+              "Cursor for the last item in the current page (use with 'after' for forward pagination)"
+          },
+          current_offset: %Schema{
+            type: :integer,
+            nullable: true,
+            description: "Current offset (only present for offset-based pagination)"
+          },
+          current_page: %Schema{
+            type: :integer,
+            nullable: true,
+            description: "Current page number (only present for offset-based pagination)"
+          },
+          total_pages: %Schema{
+            type: :integer,
+            nullable: true,
+            description: "Total number of pages (only present for offset-based pagination)"
           }
         },
         description: "Pagination metadata"
@@ -43,7 +78,11 @@ defmodule RicqchetWeb.Schemas.ApplicationList do
         }
       ],
       meta: %{
-        total: 1
+        total: 42,
+        has_next_page: true,
+        has_previous_page: false,
+        start_cursor: nil,
+        end_cursor: "g3QAAAABZAALaW5zZXJ0ZWRfYXR0AAAADQ"
       }
     }
   })

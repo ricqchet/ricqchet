@@ -71,6 +71,9 @@ defmodule Ricqchet.MixProject do
       # API Documentation
       {:open_api_spex, "~> 3.21"},
 
+      # Pagination, filtering, and sorting
+      {:flop, "~> 0.26"},
+
       # CORS
       {:corsica, "~> 2.1"},
 
