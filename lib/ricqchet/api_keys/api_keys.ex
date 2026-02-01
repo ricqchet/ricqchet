@@ -90,6 +90,17 @@ defmodule Ricqchet.ApiKeys do
   end
 
   @doc """
+  Gets an API key by ID with preloaded application for ownership verification.
+
+  Returns the API key with application preloaded, or nil if not found.
+  """
+  def get_api_key_with_application(id) do
+    ApiKey
+    |> Repo.get(id)
+    |> Repo.preload(:application)
+  end
+
+  @doc """
   Revokes an API key.
   """
   def revoke_api_key(%ApiKey{} = api_key) do
@@ -112,17 +123,18 @@ defmodule Ricqchet.ApiKeys do
   @doc """
   Rotates an API key by revoking the old one and creating a new one.
 
-  Returns `{:ok, %ApiKey{api_key: "..."}}` with the new plaintext value,
+  Returns `{:ok, {revoked_api_key, new_api_key}}` with both the revoked key
+  (with updated status) and the new key with plaintext value,
   or `{:error, reason}` on failure.
   """
   def rotate_api_key(%ApiKey{} = old_api_key) do
     application = Repo.preload(old_api_key, :application).application
 
     Repo.transaction(fn ->
-      {:ok, _revoked} = revoke_api_key(old_api_key)
+      {:ok, revoked_key} = revoke_api_key(old_api_key)
 
       case create_api_key(application, %{name: old_api_key.name}) do
-        {:ok, new_api_key} -> new_api_key
+        {:ok, new_api_key} -> {revoked_key, new_api_key}
         {:error, changeset} -> Repo.rollback(changeset)
       end
     end)
