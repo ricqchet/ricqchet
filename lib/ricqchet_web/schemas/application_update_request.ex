@@ -18,7 +18,7 @@ defmodule RicqchetWeb.Schemas.ApplicationUpdateRequest do
       },
       description: %Schema{
         type: :string,
-        maxLength: 1000,
+        maxLength: 255,
         nullable: true,
         description: "Optional description of the application"
       },

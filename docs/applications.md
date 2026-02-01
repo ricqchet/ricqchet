@@ -111,7 +111,7 @@ Creates a new application with a default API key.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | Yes | Application name (max 255 characters) |
-| `description` | string | No | Optional description (max 1000 characters) |
+| `description` | string | No | Optional description (max 255 characters) |
 | `dlq_destination_url` | string | No | Dead letter queue URL (must be HTTPS) |
 
 **Example:**

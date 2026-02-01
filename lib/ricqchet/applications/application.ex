@@ -35,6 +35,8 @@ defmodule Ricqchet.Applications.Application do
     application
     |> cast(attrs, [:name, :description, :status, :dlq_destination_url])
     |> validate_required([:name])
+    |> validate_length(:name, min: 1, max: 255)
+    |> validate_length(:description, max: 255)
     |> validate_inclusion(:status, ["active", "suspended"])
     |> validate_dlq_destination_url()
     |> foreign_key_constraint(:tenant_id)
