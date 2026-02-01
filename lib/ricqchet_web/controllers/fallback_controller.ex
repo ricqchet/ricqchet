@@ -85,6 +85,16 @@ defmodule RicqchetWeb.FallbackController do
     |> render(:error, error: "unauthorized", message: message)
   end
 
+  def call(conn, {:error, :forbidden}) do
+    conn
+    |> put_status(:forbidden)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error,
+      error: "forbidden",
+      message: "You do not have permission to perform this action"
+    )
+  end
+
   # Handle Multi transaction errors (e.g., from Auth.register_user)
   def call(conn, {:error, _step, %Ecto.Changeset{} = changeset}) do
     call(conn, {:error, changeset})

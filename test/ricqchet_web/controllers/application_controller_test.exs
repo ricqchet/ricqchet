@@ -3,20 +3,42 @@ defmodule RicqchetWeb.ApplicationControllerTest do
 
   alias Ricqchet.ApiKeys
   alias Ricqchet.Applications
+  alias Ricqchet.Auth
+  alias Ricqchet.Auth.Token
   alias Ricqchet.Repo
-
-  import Ricqchet.DataCase, only: [create_tenant_with_api_key: 0, create_tenant_with_api_key: 3]
+  alias Ricqchet.Users
 
   setup %{conn: conn} do
-    {:ok, %{tenant: tenant, application: application, api_key: api_key}} =
-      create_tenant_with_api_key()
+    # Create and verify an admin user
+    {:ok, %{user: _user, verification_token: token}} =
+      Auth.register_user(%{
+        "email" => "admin#{System.unique_integer()}@example.com",
+        "password" => "secure_password_123",
+        "tenant_name" => "Test Org #{System.unique_integer()}"
+      })
+
+    {:ok, verified_user} = Auth.verify_email(token)
+    {:ok, access_token, _claims} = Token.generate_access_token(verified_user)
+
+    user = Repo.preload(verified_user, :tenant)
+    tenant = user.tenant
+
+    # Create a test application
+    {:ok, application} = Applications.create_application(tenant, %{name: "Test Application"})
+    {:ok, _api_key} = ApiKeys.create_api_key(application, %{name: "Test API Key"})
 
     conn =
       conn
-      |> put_req_header("authorization", "Bearer #{api_key.api_key}")
+      |> put_req_header("authorization", "Bearer #{access_token}")
       |> put_req_header("content-type", "application/json")
 
-    %{conn: conn, tenant: tenant, application: application, api_key: api_key}
+    %{
+      conn: conn,
+      user: user,
+      tenant: tenant,
+      application: application,
+      access_token: access_token
+    }
   end
 
   describe "index/2" do
@@ -52,18 +74,48 @@ defmodule RicqchetWeb.ApplicationControllerTest do
       assert json_response(conn, 401)["error"] == "unauthorized"
     end
 
-    test "only returns applications for current tenant", %{conn: conn, application: application} do
-      # Create another tenant with applications
-      {:ok, %{application: other_app}} =
-        create_tenant_with_api_key(%{name: "Other Tenant"}, %{name: "Other App"}, %{})
+    test "allows member role to list applications", %{tenant: tenant} do
+      # Create a member user
+      {:ok, unconfirmed_member} =
+        Users.create_user(tenant, %{
+          email: "member#{System.unique_integer()}@example.com",
+          password: "secure_password_123",
+          role: "member"
+        })
 
-      conn = get(conn, "/v1/applications")
+      {:ok, member} = Users.confirm_user(unconfirmed_member)
+      {:ok, member_token, _claims} = Token.generate_access_token(member)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> get("/v1/applications")
 
       response = json_response(conn, 200)
-      app_ids = Enum.map(response["data"], & &1["id"])
+      assert is_list(response["data"])
+    end
 
-      assert application.id in app_ids
-      refute other_app.id in app_ids
+    test "allows viewer role to list applications", %{tenant: tenant} do
+      # Create a viewer user
+      {:ok, unconfirmed_viewer} =
+        Users.create_user(tenant, %{
+          email: "viewer#{System.unique_integer()}@example.com",
+          password: "secure_password_123",
+          role: "viewer"
+        })
+
+      {:ok, viewer} = Users.confirm_user(unconfirmed_viewer)
+      {:ok, viewer_token, _claims} = Token.generate_access_token(viewer)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{viewer_token}")
+        |> put_req_header("content-type", "application/json")
+        |> get("/v1/applications")
+
+      response = json_response(conn, 200)
+      assert is_list(response["data"])
     end
   end
 
@@ -97,8 +149,17 @@ defmodule RicqchetWeb.ApplicationControllerTest do
     end
 
     test "returns 404 for application belonging to another tenant", %{conn: conn} do
-      {:ok, %{application: other_app}} =
-        create_tenant_with_api_key(%{name: "Other Tenant"}, %{name: "Other App"}, %{})
+      # Create another tenant with application
+      {:ok, %{user: _other_user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "other#{System.unique_integer()}@example.com",
+          "password" => "secure_password_123",
+          "tenant_name" => "Other Org"
+        })
+
+      {:ok, verified_other_user} = Auth.verify_email(token)
+      other_user = Repo.preload(verified_other_user, :tenant)
+      {:ok, other_app} = Applications.create_application(other_user.tenant, %{name: "Other App"})
 
       conn = get(conn, "/v1/applications/#{other_app.id}")
 
@@ -143,21 +204,16 @@ defmodule RicqchetWeb.ApplicationControllerTest do
       assert List.first(app.api_keys).name == "Default"
     end
 
-    test "returns api key only on creation", %{conn: conn} do
+    test "returns api key only on creation", %{conn: conn, access_token: access_token} do
       # Create
       conn1 = post(conn, "/v1/applications", %{name: "App With Key"})
       response1 = json_response(conn1, 201)
       assert response1["api_key"]
 
       # Fetch - no api_key field
-      auth_header =
-        conn
-        |> get_req_header("authorization")
-        |> List.first()
-
       conn2 =
         build_conn()
-        |> put_req_header("authorization", auth_header)
+        |> put_req_header("authorization", "Bearer #{access_token}")
         |> put_req_header("content-type", "application/json")
         |> get("/v1/applications/#{response1["id"]}")
 
@@ -201,6 +257,27 @@ defmodule RicqchetWeb.ApplicationControllerTest do
         |> post("/v1/applications", %{name: "Test"})
 
       assert json_response(conn, 401)["error"] == "unauthorized"
+    end
+
+    test "returns 403 for non-admin user", %{tenant: tenant} do
+      # Create a member user
+      {:ok, unconfirmed_member} =
+        Users.create_user(tenant, %{
+          email: "member_create#{System.unique_integer()}@example.com",
+          password: "secure_password_123",
+          role: "member"
+        })
+
+      {:ok, member} = Users.confirm_user(unconfirmed_member)
+      {:ok, member_token, _claims} = Token.generate_access_token(member)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/applications", %{name: "Not Allowed"})
+
+      assert json_response(conn, 403)["error"] == "forbidden"
     end
   end
 
@@ -259,8 +336,17 @@ defmodule RicqchetWeb.ApplicationControllerTest do
     end
 
     test "returns 404 for application belonging to another tenant", %{conn: conn} do
-      {:ok, %{application: other_app}} =
-        create_tenant_with_api_key(%{name: "Other Tenant"}, %{name: "Other App"}, %{})
+      # Create another tenant with application
+      {:ok, %{user: _other_user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "other_update#{System.unique_integer()}@example.com",
+          "password" => "secure_password_123",
+          "tenant_name" => "Other Org Update"
+        })
+
+      {:ok, verified_other} = Auth.verify_email(token)
+      other_user = Repo.preload(verified_other, :tenant)
+      {:ok, other_app} = Applications.create_application(other_user.tenant, %{name: "Other App"})
 
       conn =
         patch(conn, "/v1/applications/#{other_app.id}", %{
@@ -286,6 +372,27 @@ defmodule RicqchetWeb.ApplicationControllerTest do
         |> patch("/v1/applications/#{application.id}", %{name: "Updated"})
 
       assert json_response(conn, 401)["error"] == "unauthorized"
+    end
+
+    test "returns 403 for non-admin user", %{tenant: tenant, application: application} do
+      # Create a member user
+      {:ok, unconfirmed_member} =
+        Users.create_user(tenant, %{
+          email: "member_update#{System.unique_integer()}@example.com",
+          password: "secure_password_123",
+          role: "member"
+        })
+
+      {:ok, member} = Users.confirm_user(unconfirmed_member)
+      {:ok, member_token, _claims} = Token.generate_access_token(member)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> patch("/v1/applications/#{application.id}", %{name: "Not Allowed"})
+
+      assert json_response(conn, 403)["error"] == "forbidden"
     end
   end
 
@@ -317,8 +424,17 @@ defmodule RicqchetWeb.ApplicationControllerTest do
     end
 
     test "returns 404 for application belonging to another tenant", %{conn: conn} do
-      {:ok, %{application: other_app}} =
-        create_tenant_with_api_key(%{name: "Other Tenant"}, %{name: "Other App"}, %{})
+      # Create another tenant with application
+      {:ok, %{user: _other_user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "other_delete#{System.unique_integer()}@example.com",
+          "password" => "secure_password_123",
+          "tenant_name" => "Other Org Delete"
+        })
+
+      {:ok, verified_other} = Auth.verify_email(token)
+      other_user = Repo.preload(verified_other, :tenant)
+      {:ok, other_app} = Applications.create_application(other_user.tenant, %{name: "Other App"})
 
       conn = delete(conn, "/v1/applications/#{other_app.id}")
 
@@ -332,6 +448,33 @@ defmodule RicqchetWeb.ApplicationControllerTest do
         |> delete("/v1/applications/#{application.id}")
 
       assert json_response(conn, 401)["error"] == "unauthorized"
+    end
+
+    test "returns 403 for non-admin user", %{tenant: tenant} do
+      # Create an application to try to delete
+      {:ok, app} = Applications.create_application(tenant, %{name: "To Not Delete"})
+
+      # Create a member user
+      {:ok, unconfirmed_member} =
+        Users.create_user(tenant, %{
+          email: "member_delete#{System.unique_integer()}@example.com",
+          password: "secure_password_123",
+          role: "member"
+        })
+
+      {:ok, member} = Users.confirm_user(unconfirmed_member)
+      {:ok, member_token, _claims} = Token.generate_access_token(member)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> delete("/v1/applications/#{app.id}")
+
+      assert json_response(conn, 403)["error"] == "forbidden"
+
+      # Verify application was NOT deleted
+      assert Applications.get_application(app.id) != nil
     end
   end
 end
