@@ -47,6 +47,13 @@ config :ricqchet, :cors,
   allow_credentials: true,
   max_age: 86_400
 
+# Flop pagination configuration
+config :flop,
+  repo: Ricqchet.Repo,
+  default_limit: 25,
+  max_limit: 100,
+  pagination_types: [:first, :last, :offset]
+
 # Swoosh mailer configuration
 config :ricqchet, Ricqchet.Mailer, adapter: Swoosh.Adapters.Local
 

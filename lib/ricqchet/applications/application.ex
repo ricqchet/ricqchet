@@ -14,6 +14,25 @@ defmodule Ricqchet.Applications.Application do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
+  # Flop configuration for pagination, filtering, and sorting.
+  #
+  # Supported filter operators by field:
+  #   - name: ==, !=, =~, ilike, like, empty, not_empty
+  #   - status: ==, != (use exact match for enum values)
+  #
+  # Example filter params:
+  #   filters[0][field]=name&filters[0][op]=ilike&filters[0][value]=prod
+  #   filters[0][field]=status&filters[0][value]=active
+  @derive {
+    Flop.Schema,
+    filterable: [:name, :status],
+    sortable: [:name, :status, :inserted_at, :updated_at],
+    default_order: %{
+      order_by: [:inserted_at],
+      order_directions: [:desc]
+    }
+  }
+
   @type t :: %__MODULE__{}
 
   schema "applications" do

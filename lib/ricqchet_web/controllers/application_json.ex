@@ -17,10 +17,10 @@ defmodule RicqchetWeb.ApplicationJSON do
   - `updated.json` - Renders updated application
   - `deleted.json` - Renders deletion confirmation
   """
-  def render("index.json", %{applications: applications, total: total}) do
+  def render("index.json", %{applications: applications, meta: meta}) do
     %{
       data: Enum.map(applications, &application_summary/1),
-      meta: %{total: total}
+      meta: pagination_meta(meta)
     }
   end
 
@@ -108,5 +108,26 @@ defmodule RicqchetWeb.ApplicationJSON do
       expires_at: key.expires_at,
       created_at: key.inserted_at
     }
+  end
+
+  defp pagination_meta(%Flop.Meta{} = meta) do
+    base = %{
+      total: meta.total_count,
+      has_next_page: meta.has_next_page?,
+      has_previous_page: meta.has_previous_page?,
+      start_cursor: meta.start_cursor,
+      end_cursor: meta.end_cursor
+    }
+
+    maybe_add_offset_meta(base, meta)
+  end
+
+  defp maybe_add_offset_meta(result, %Flop.Meta{current_offset: nil}), do: result
+
+  defp maybe_add_offset_meta(result, %Flop.Meta{} = meta) do
+    result
+    |> Map.put(:current_offset, meta.current_offset)
+    |> Map.put(:current_page, meta.current_page)
+    |> Map.put(:total_pages, meta.total_pages)
   end
 end
