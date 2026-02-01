@@ -74,11 +74,12 @@ defmodule RicqchetWeb.Plugs.JWTAuthenticate do
       when status in ["active", "pending"] ->
         {:ok, Repo.preload(user, :tenant)}
 
+      %User{status: status}
+      when status not in ["active", "pending"] ->
+        {:error, :user_not_active}
+
       %User{token_version: _different_version} ->
         {:error, :invalid_token_version}
-
-      %User{status: _inactive_status} ->
-        {:error, :user_not_active}
 
       nil ->
         {:error, :user_not_found}

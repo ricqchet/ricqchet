@@ -13,7 +13,7 @@ defmodule Ricqchet.Repo.Migrations.CreateRefreshTokens do
     end
 
     create index(:refresh_tokens, [:user_id])
-    create index(:refresh_tokens, [:token_hash])
+    create unique_index(:refresh_tokens, [:token_hash])
     create index(:refresh_tokens, [:expires_at])
   end
 end

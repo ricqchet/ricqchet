@@ -53,47 +53,4 @@ defmodule RicqchetWeb.UserControllerTest do
       assert json_response(conn, 401)
     end
   end
-
-  describe "PATCH /v1/users/me" do
-    setup do
-      # Create and verify a user
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "updateuser@example.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Update Org"
-        })
-
-      {:ok, user} = Auth.verify_email(token)
-      {:ok, access_token, _claims} = Token.generate_access_token(user)
-
-      %{user: user, access_token: access_token}
-    end
-
-    test "returns user profile for authenticated user", %{
-      conn: conn,
-      user: user,
-      access_token: token
-    } do
-      conn =
-        conn
-        |> put_req_header("content-type", "application/json")
-        |> put_req_header("authorization", "Bearer #{token}")
-        |> patch("/v1/users/me", %{})
-
-      response = json_response(conn, 200)
-
-      assert response["id"] == user.id
-      assert response["email"] == user.email
-    end
-
-    test "returns 401 without authentication", %{conn: conn} do
-      conn =
-        conn
-        |> put_req_header("content-type", "application/json")
-        |> patch("/v1/users/me", %{})
-
-      assert json_response(conn, 401)
-    end
-  end
 end

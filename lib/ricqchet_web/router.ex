@@ -54,7 +54,6 @@ defmodule RicqchetWeb.Router do
     pipe_through [:api, :jwt_authenticated]
 
     get "/me", UserController, :show
-    patch "/me", UserController, :update
   end
 
   # API v1 endpoints (API key auth required for relay operations)

@@ -366,8 +366,12 @@ defmodule RicqchetWeb.AuthControllerTest do
     test "logs out everywhere when requested", %{
       conn: conn,
       access_token: access_token,
-      refresh_token: refresh_token
+      refresh_token: refresh_token,
+      user: user
     } do
+      # Create a second refresh token to simulate another session
+      {:ok, second_refresh_token} = Auth.create_refresh_token(user)
+
       conn =
         conn
         |> put_req_header("content-type", "application/json")
@@ -376,6 +380,22 @@ defmodule RicqchetWeb.AuthControllerTest do
 
       response = json_response(conn, 200)
       assert response["message"] =~ "all sessions"
+
+      # Verify original refresh token is invalidated
+      conn2 =
+        build_conn()
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/refresh", %{refresh_token: refresh_token})
+
+      assert json_response(conn2, 401)
+
+      # Verify second refresh token is also invalidated
+      conn3 =
+        build_conn()
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/refresh", %{refresh_token: second_refresh_token.token})
+
+      assert json_response(conn3, 401)
     end
 
     test "returns 401 without authentication", %{conn: conn, refresh_token: refresh_token} do
