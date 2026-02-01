@@ -151,7 +151,7 @@ Credentials (cookies, authorization headers) are supported for authenticated req
 | `SECRET_KEY_BASE` | Phoenix secret key | - |
 | `PHX_HOST` | Application host for URLs | localhost |
 | `PORT` | HTTP server port | 4000 |
-| `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | localhost:3000,4000 |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | http://localhost:3000, http://localhost:4000 |
 
 ## Development Dashboard
 
