@@ -158,6 +158,18 @@ curl -X DELETE "http://localhost:4000/v1/messages/550e8400-..." \
 {"error": "already_dispatched", "message": "Message already dispatched"}
 ```
 
+### Application Management
+
+For managing applications within a tenant, see [Applications](applications.md).
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/applications` | List all applications |
+| `GET /v1/applications/{id}` | Get application details |
+| `POST /v1/applications` | Create new application |
+| `PATCH /v1/applications/{id}` | Update application |
+| `DELETE /v1/applications/{id}` | Delete application |
+
 ## Fan-out
 
 Use the `Ricqchet-Fan-Out` header to broadcast the same message to multiple destinations with a single API call. This creates separate messages for each destination, each with its own delivery tracking.
