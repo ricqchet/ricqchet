@@ -48,6 +48,14 @@ defmodule RicqchetWeb.Router do
     post "/logout", AuthController, :logout
   end
 
+  # User profile endpoints (JWT auth required)
+  scope "/v1/users", RicqchetWeb do
+    pipe_through [:api, :jwt_authenticated]
+
+    get "/me", UserController, :show
+    patch "/me", UserController, :update
+  end
+
   # API v1 endpoints (API key auth required for relay operations)
   scope "/v1", RicqchetWeb do
     pipe_through [:api, :authenticated]
