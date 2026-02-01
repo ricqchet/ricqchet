@@ -46,6 +46,7 @@ defmodule RicqchetWeb.Router do
     post "/verify-email", AuthController, :verify_email
     post "/login", AuthController, :login
     post "/refresh", AuthController, :refresh
+    post "/accept-invite", AuthController, :accept_invite
   end
 
   # Rate-limited public auth endpoints (to prevent abuse)
@@ -70,6 +71,20 @@ defmodule RicqchetWeb.Router do
     pipe_through [:api, :jwt_authenticated]
 
     get "/me", UserController, :show
+  end
+
+  # Tenant management (JWT auth required)
+  scope "/v1/tenant", RicqchetWeb do
+    pipe_through [:api, :jwt_authenticated]
+
+    get "/", TenantController, :show
+    patch "/", TenantController, :update
+
+    # Tenant user management
+    get "/users", TenantUserController, :index
+    post "/users/invite", TenantUserController, :invite
+    patch "/users/:id", TenantUserController, :update
+    delete "/users/:id", TenantUserController, :delete
   end
 
   # Application management (JWT auth required, role-based access)

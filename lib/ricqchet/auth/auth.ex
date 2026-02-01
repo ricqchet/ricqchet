@@ -14,6 +14,7 @@ defmodule Ricqchet.Auth do
   alias Ricqchet.Auth.Token
   alias Ricqchet.Repo
   alias Ricqchet.Tenants
+  alias Ricqchet.Tenants.Invitation
   alias Ricqchet.Users
   alias Ricqchet.Users.User
 
@@ -370,10 +371,62 @@ defmodule Ricqchet.Auth do
     end
   end
 
+  @doc """
+  Accepts an invitation to join a tenant.
+
+  Creates a new user account for the invited email address and returns JWT
+  tokens for immediate authentication.
+
+  Returns `{:error, :user_already_exists}` if a user with that email already
+  exists in the tenant.
+
+  ## Examples
+
+      iex> accept_invitation("invitation-token", "password123456")
+      {:ok, %{user: %User{}, access_token: "...", refresh_token: "...", expires_in: 900}}
+
+      iex> accept_invitation("invalid-token", "password")
+      {:error, :invalid_token}
+  """
+  def accept_invitation(token_string, password) do
+    Repo.transaction(fn ->
+      with {:ok, invitation} <- get_and_validate_invitation(token_string),
+           {:ok, user} <- create_user_from_invitation(invitation, password),
+           {:ok, _} <- Tenants.accept_invitation(invitation),
+           {:ok, auth_data} <- generate_auth_tokens(user) do
+        auth_data
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp get_and_validate_invitation(token_string) do
+    with {:ok, invitation} <- get_invitation_by_token(token_string),
+         :ok <- validate_invitation(invitation),
+         invitation <- Repo.preload(invitation, :tenant),
+         :ok <- check_user_does_not_exist(invitation) do
+      {:ok, invitation}
+    end
+  end
+
   # Private functions
 
   defp verify_email_confirmed(%User{confirmed_at: nil}), do: {:error, :email_not_verified}
   defp verify_email_confirmed(%User{}), do: :ok
+
+  defp generate_auth_tokens(%User{} = user) do
+    with {:ok, access_token, _claims} <- Token.generate_access_token(user),
+         {:ok, refresh_token} <- create_refresh_token(user) do
+      {:ok,
+       %{
+         user: Repo.preload(user, :tenant),
+         access_token: access_token,
+         refresh_token: refresh_token.token,
+         expires_in: Application.get_env(:ricqchet, :jwt_access_token_ttl, 900)
+       }}
+    end
+  end
 
   defp get_refresh_token_by_token(token_string) when is_binary(token_string) do
     token_hash = RefreshToken.hash_token(token_string)
@@ -411,7 +464,7 @@ defmodule Ricqchet.Auth do
     {:ok, :deleted}
   end
 
-  defp get_password_reset_token_by_token(token_string) when is_binary(token_string) do
+defp get_password_reset_token_by_token(token_string) when is_binary(token_string) do
     token_hash = PasswordResetToken.hash_token(token_string)
 
     result =
@@ -431,5 +484,45 @@ defmodule Ricqchet.Auth do
     |> Repo.delete_all()
 
     {:ok, :deleted}
+  end
+
+  defp get_invitation_by_token(token_string) when is_binary(token_string) do
+    case Tenants.get_invitation_by_token(token_string) do
+      nil -> {:error, :invalid_token}
+      invitation -> {:ok, invitation}
+    end
+  end
+
+  defp validate_invitation(%Invitation{status: "pending"} = invitation) do
+    if Invitation.expired?(invitation) do
+      {:error, :token_expired}
+    else
+      :ok
+    end
+  end
+
+  defp validate_invitation(%Invitation{}), do: {:error, :invitation_not_pending}
+
+  defp check_user_does_not_exist(%Invitation{} = invitation) do
+    case Users.get_user_by_email_and_tenant(invitation.email, invitation.tenant) do
+      nil -> :ok
+      %User{} -> {:error, :user_already_exists}
+    end
+  end
+
+  defp create_user_from_invitation(%Invitation{} = invitation, password) do
+    # Create a new user with the invitation's email and role
+    # User is automatically confirmed since they received the invitation email
+    user_attrs = %{
+      "email" => invitation.email,
+      "password" => password,
+      "role" => invitation.role,
+      "status" => "active"
+    }
+
+    %User{}
+    |> User.registration_changeset(invitation.tenant, user_attrs)
+    |> Ecto.Changeset.put_change(:confirmed_at, DateTime.utc_now())
+    |> Repo.insert()
   end
 end

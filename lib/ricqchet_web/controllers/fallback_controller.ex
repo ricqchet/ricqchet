@@ -95,6 +95,56 @@ defmodule RicqchetWeb.FallbackController do
     )
   end
 
+  def call(conn, {:error, :cannot_remove_self}) do
+    conn
+    |> put_status(:forbidden)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error,
+      error: "forbidden",
+      message: "You cannot remove yourself from the tenant"
+    )
+  end
+
+  def call(conn, {:error, :cannot_demote_last_admin}) do
+    conn
+    |> put_status(:forbidden)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error,
+      error: "forbidden",
+      message: "Cannot demote the last admin. Promote another user to admin first."
+    )
+  end
+
+  def call(conn, {:error, :invalid_token}) do
+    conn
+    |> put_status(:bad_request)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error,
+      error: "invalid_token",
+      message: "The invitation token is invalid"
+    )
+  end
+
+  def call(conn, {:error, :token_expired}) do
+    conn
+    |> put_status(:bad_request)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error,
+      error: "token_expired",
+      message: "The invitation has expired"
+    )
+  end
+
+  def call(conn, {:error, :invitation_not_pending}) do
+    conn
+    |> put_status(:bad_request)
+    |> put_view(json: RicqchetWeb.ErrorJSON)
+    |> render(:error,
+      error: "invitation_not_pending",
+      message: "This invitation has already been used or revoked"
+    )
+  end
+
   # Handle Multi transaction errors (e.g., from Auth.register_user)
   def call(conn, {:error, _step, %Ecto.Changeset{} = changeset}) do
     call(conn, {:error, changeset})

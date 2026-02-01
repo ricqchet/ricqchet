@@ -1,17 +1,80 @@
 defmodule RicqchetWeb.TenantController do
   @moduledoc """
-  Controller for tenant-specific information.
+  Controller for tenant management.
+
+  Provides endpoints for viewing and updating tenant information.
+
+  ## Authorization
+
+  - **Show**: Any authenticated tenant member can view basic info, admins see sensitive fields
+  - **Update**: Tenant admin only
   """
 
   use RicqchetWeb, :controller
   use OpenApiSpex.ControllerSpecs
 
   alias OpenApiSpex.Schema
+  alias Ricqchet.Tenants
+  alias Ricqchet.Users.User
   alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
 
   tags(["tenant"])
+
+  operation(:show,
+    summary: "Get current tenant",
+    description: """
+    Returns details about the current tenant.
+
+    All authenticated users can view basic tenant information.
+    Admins see additional sensitive fields like the signing secret.
+    """,
+    responses: Schemas.Helpers.show_responses(Schemas.Tenant.TenantResponse, [401, 429]),
+    security: [%{"bearerAuth" => []}]
+  )
+
+  @doc """
+  Returns the current tenant's details.
+
+  Admins see additional sensitive fields like signing_secret.
+  """
+  def show(conn, _params) do
+    user = conn.assigns.current_user
+    tenant = conn.assigns.current_tenant
+
+    render(conn, :show, tenant: tenant, is_admin: user.role == "admin")
+  end
+
+  operation(:update,
+    summary: "Update current tenant",
+    description: """
+    Updates the current tenant's name or default settings.
+
+    **Requires admin role.**
+    """,
+    request_body:
+      {"Tenant parameters", "application/json", Schemas.Tenant.TenantUpdateRequest,
+       required: true},
+    responses:
+      Schemas.Helpers.update_responses(Schemas.Tenant.TenantResponse, [401, 403, 422, 429]),
+    security: [%{"bearerAuth" => []}]
+  )
+
+  @doc """
+  Updates the current tenant.
+
+  Requires admin role.
+  """
+  def update(conn, params) do
+    user = conn.assigns.current_user
+    tenant = conn.assigns.current_tenant
+
+    with :ok <- authorize_admin(user),
+         {:ok, updated_tenant} <- Tenants.update_tenant(tenant, params) do
+      render(conn, :show, tenant: updated_tenant, is_admin: true)
+    end
+  end
 
   operation(:signing_secret,
     summary: "Get signing secret",
@@ -59,4 +122,9 @@ defmodule RicqchetWeb.TenantController do
 
     render(conn, :signing_secret, signing_secret: tenant.signing_secret)
   end
+
+  # Authorization helpers
+
+  defp authorize_admin(%User{role: "admin"}), do: :ok
+  defp authorize_admin(_user), do: {:error, :forbidden}
 end
