@@ -10,6 +10,11 @@ defmodule RicqchetWeb.Router do
     plug RicqchetWeb.Plugs.RateLimiter
   end
 
+  pipeline :jwt_authenticated do
+    plug RicqchetWeb.Plugs.JWTAuthenticate
+    plug RicqchetWeb.Plugs.RateLimiter
+  end
+
   # Health check endpoint (no auth required)
   scope "/", RicqchetWeb do
     pipe_through :api
@@ -25,7 +30,14 @@ defmodule RicqchetWeb.Router do
     get "/docs", OpenApiSpex.Plug.SwaggerUI, path: "/api/openapi"
   end
 
-  # API v1 endpoints (auth required)
+  # Public auth endpoints (no auth required)
+  scope "/v1/auth", RicqchetWeb do
+    pipe_through [:api]
+
+    post "/register", AuthController, :register
+  end
+
+  # API v1 endpoints (API key auth required for relay operations)
   scope "/v1", RicqchetWeb do
     pipe_through [:api, :authenticated]
 

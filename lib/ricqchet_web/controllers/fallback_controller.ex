@@ -71,6 +71,11 @@ defmodule RicqchetWeb.FallbackController do
     |> render(:error, error: "validation_error", message: message)
   end
 
+  # Handle Multi transaction errors (e.g., from Auth.register_user)
+  def call(conn, {:error, _step, %Ecto.Changeset{} = changeset}) do
+    call(conn, {:error, changeset})
+  end
+
   defp format_changeset_errors(changeset) do
     changeset
     |> Ecto.Changeset.traverse_errors(fn {msg, opts} ->
