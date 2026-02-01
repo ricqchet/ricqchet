@@ -239,6 +239,180 @@ defmodule RicqchetWeb.AuthControllerTest do
     end
   end
 
+  describe "POST /v1/auth/forgot-password" do
+    setup do
+      # Create and verify a user
+      {:ok, %{user: _user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "forgotpassword@example.com",
+          "password" => "secure_password_123",
+          "tenant_name" => "Forgot Password Org"
+        })
+
+      {:ok, verified_user} = Auth.verify_email(token)
+      %{user: verified_user}
+    end
+
+    test "sends password reset email for existing user", %{conn: conn, user: user} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/forgot-password", %{email: user.email})
+
+      response = json_response(conn, 200)
+      assert response["message"] =~ "password reset link"
+
+      assert_email_sent(to: user.email, subject: "Reset your password")
+    end
+
+    test "returns success even for non-existent email (prevents enumeration)", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/forgot-password", %{email: "nonexistent@example.com"})
+
+      response = json_response(conn, 200)
+      # Same message regardless of whether email exists
+      assert response["message"] =~ "password reset link"
+
+      # No email should be sent
+      assert_no_email_sent()
+    end
+
+    test "returns 422 when email is missing", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/forgot-password", %{})
+
+      response = json_response(conn, 422)
+      assert response["error"] == "validation_error"
+      assert response["message"] =~ "Email"
+    end
+  end
+
+  describe "POST /v1/auth/reset-password" do
+    setup do
+      # Create and verify a user
+      {:ok, %{user: _user, verification_token: token}} =
+        Auth.register_user(%{
+          "email" => "resetpassword@example.com",
+          "password" => "old_password_123",
+          "tenant_name" => "Reset Password Org"
+        })
+
+      {:ok, verified_user} = Auth.verify_email(token)
+
+      # Create a password reset token
+      {:ok, reset_token} = Auth.create_password_reset_token(verified_user)
+
+      %{user: verified_user, reset_token: reset_token.token}
+    end
+
+    test "resets password with valid token", %{conn: conn, reset_token: token, user: user} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/reset-password", %{token: token, password: "new_password_456"})
+
+      response = json_response(conn, 200)
+      assert response["message"] =~ "Password has been reset"
+
+      # Verify new password works
+      {:ok, _auth_data} = Auth.login(user.email, "new_password_456")
+    end
+
+    test "invalidates all existing sessions after password reset", %{
+      conn: conn,
+      reset_token: reset_token,
+      user: user
+    } do
+      # Create a refresh token before reset
+      {:ok, refresh_token} = Auth.create_refresh_token(user)
+
+      # Reset password
+      conn
+      |> put_req_header("content-type", "application/json")
+      |> post("/v1/auth/reset-password", %{token: reset_token, password: "new_password_456"})
+
+      # Try to use the old refresh token - should fail
+      conn2 =
+        build_conn()
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/refresh", %{refresh_token: refresh_token.token})
+
+      assert json_response(conn2, 401)
+    end
+
+    test "returns 400 with invalid token", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/reset-password", %{token: "invalid_token", password: "new_password_123"})
+
+      response = json_response(conn, 400)
+      assert response["error"] == "bad_request"
+      assert response["message"] =~ "Invalid"
+    end
+
+    test "returns 400 with expired token", %{conn: conn, user: user} do
+      # Create an expired token
+      {:ok, token} = Auth.create_password_reset_token(user)
+
+      # Manually expire it
+      token
+      |> Ecto.Changeset.change(expires_at: DateTime.add(DateTime.utc_now(), -1, :hour))
+      |> Repo.update!()
+
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/reset-password", %{token: token.token, password: "new_password_123"})
+
+      response = json_response(conn, 400)
+      assert response["error"] == "bad_request"
+      assert response["message"] =~ "expired"
+    end
+
+    test "token can only be used once", %{conn: conn, reset_token: token} do
+      # First reset should succeed
+      conn
+      |> put_req_header("content-type", "application/json")
+      |> post("/v1/auth/reset-password", %{token: token, password: "new_password_456"})
+
+      # Second reset with same token should fail
+      conn2 =
+        build_conn()
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/reset-password", %{token: token, password: "another_password_789"})
+
+      response = json_response(conn2, 400)
+      assert response["error"] == "bad_request"
+      assert response["message"] =~ "Invalid"
+    end
+
+    test "returns 422 when token or password is missing", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/reset-password", %{})
+
+      response = json_response(conn, 422)
+      assert response["error"] == "validation_error"
+    end
+
+    test "returns 422 with invalid password (too short)", %{conn: conn, reset_token: token} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/auth/reset-password", %{token: token, password: "short"})
+
+      response = json_response(conn, 422)
+      assert response["error"] == "validation_error"
+      assert response["message"] =~ "password"
+    end
+  end
+
   describe "POST /v1/auth/login" do
     setup do
       # Create and verify a user

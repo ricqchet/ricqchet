@@ -154,6 +154,8 @@
           {Credo.Check.Refactor.FilterReject, []},
           {Credo.Check.Refactor.IoPuts, []},
           {Credo.Check.Refactor.MapMap, []},
+          # Increased max_deps to 25 because API controllers and routers need many
+          # module dependencies for OpenAPI schema definitions
           {Credo.Check.Refactor.ModuleDependencies, [max_deps: 25]},
           {Credo.Check.Refactor.NegatedIsNil, []},
           {Credo.Check.Refactor.PassAsyncInTestCases, []},

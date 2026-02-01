@@ -19,6 +19,10 @@ defmodule RicqchetWeb.Router do
     plug RicqchetWeb.Plugs.RateLimiter
   end
 
+  pipeline :auth_rate_limited do
+    plug RicqchetWeb.Plugs.AuthRateLimiter
+  end
+
   # Health check endpoint (no auth required)
   scope "/", RicqchetWeb do
     pipe_through :api
@@ -40,8 +44,16 @@ defmodule RicqchetWeb.Router do
 
     post "/register", AuthController, :register
     post "/verify-email", AuthController, :verify_email
+    post "/reset-password", AuthController, :reset_password
     post "/login", AuthController, :login
     post "/refresh", AuthController, :refresh
+  end
+
+  # Rate-limited public auth endpoints (to prevent abuse)
+  scope "/v1/auth", RicqchetWeb do
+    pipe_through [:api, :auth_rate_limited]
+
+    post "/forgot-password", AuthController, :forgot_password
   end
 
   # Protected auth endpoints (JWT auth required)
