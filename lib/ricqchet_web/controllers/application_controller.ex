@@ -33,6 +33,20 @@ defmodule RicqchetWeb.ApplicationController do
     security: [%{"bearer_auth" => []}]
   )
 
+  @doc """
+  Lists all applications for the current tenant.
+  """
+  def index(conn, _params) do
+    tenant = conn.assigns.current_tenant
+
+    applications =
+      tenant
+      |> Applications.list_applications_for_tenant()
+      |> Repo.preload(:api_keys)
+
+    render(conn, :index, applications: applications, total: length(applications))
+  end
+
   operation(:show,
     summary: "Get application details",
     description: """
@@ -50,6 +64,22 @@ defmodule RicqchetWeb.ApplicationController do
     responses: Schemas.Helpers.show_responses(Schemas.ApplicationDetail),
     security: [%{"bearer_auth" => []}]
   )
+
+  @doc """
+  Gets a single application with its API keys.
+  """
+  def show(conn, %{"id" => id}) do
+    tenant = conn.assigns.current_tenant
+
+    case Applications.get_application_by_tenant(tenant, id) do
+      nil ->
+        {:error, :not_found}
+
+      application ->
+        application = Repo.preload(application, :api_keys)
+        render(conn, :show, application: application)
+    end
+  end
 
   operation(:create,
     summary: "Create application",
@@ -73,6 +103,23 @@ defmodule RicqchetWeb.ApplicationController do
     security: [%{"bearer_auth" => []}]
   )
 
+  @doc """
+  Creates a new application with an initial API key.
+
+  Requires admin role.
+  """
+  def create(conn, params) do
+    user = conn.assigns.current_user
+    tenant = conn.assigns.current_tenant
+
+    with :ok <- authorize_admin(user),
+         {:ok, {application, api_key}} <- create_application_with_key(tenant, params) do
+      conn
+      |> put_status(:created)
+      |> render(:created, application: application, api_key: api_key)
+    end
+  end
+
   operation(:update,
     summary: "Update application",
     description: """
@@ -95,6 +142,23 @@ defmodule RicqchetWeb.ApplicationController do
       Schemas.Helpers.update_responses(Schemas.ApplicationDetail, [401, 403, 404, 422, 429]),
     security: [%{"bearer_auth" => []}]
   )
+
+  @doc """
+  Updates an existing application.
+
+  Requires admin role.
+  """
+  def update(conn, %{"id" => id} = params) do
+    user = conn.assigns.current_user
+    tenant = conn.assigns.current_tenant
+    update_params = Map.drop(params, ["id"])
+
+    with :ok <- authorize_admin(user),
+         {:ok, application} <- get_application_or_error(tenant, id),
+         {:ok, updated} <- Applications.update_application(application, update_params) do
+      render(conn, :updated, application: Repo.preload(updated, :api_keys))
+    end
+  end
 
   operation(:delete,
     summary: "Delete application",
@@ -124,70 +188,6 @@ defmodule RicqchetWeb.ApplicationController do
       ]),
     security: [%{"bearer_auth" => []}]
   )
-
-  @doc """
-  Lists all applications for the current tenant.
-  """
-  def index(conn, _params) do
-    tenant = conn.assigns.current_tenant
-
-    applications =
-      tenant
-      |> Applications.list_applications_for_tenant()
-      |> Repo.preload(:api_keys)
-
-    render(conn, :index, applications: applications, total: length(applications))
-  end
-
-  @doc """
-  Gets a single application with its API keys.
-  """
-  def show(conn, %{"id" => id}) do
-    tenant = conn.assigns.current_tenant
-
-    case Applications.get_application_by_tenant(tenant, id) do
-      nil ->
-        {:error, :not_found}
-
-      application ->
-        application = Repo.preload(application, :api_keys)
-        render(conn, :show, application: application)
-    end
-  end
-
-  @doc """
-  Creates a new application with an initial API key.
-
-  Requires admin role.
-  """
-  def create(conn, params) do
-    user = conn.assigns.current_user
-    tenant = conn.assigns.current_tenant
-
-    with :ok <- authorize_admin(user),
-         {:ok, {application, api_key}} <- create_application_with_key(tenant, params) do
-      conn
-      |> put_status(:created)
-      |> render(:created, application: application, api_key: api_key)
-    end
-  end
-
-  @doc """
-  Updates an existing application.
-
-  Requires admin role.
-  """
-  def update(conn, %{"id" => id} = params) do
-    user = conn.assigns.current_user
-    tenant = conn.assigns.current_tenant
-    update_params = Map.drop(params, ["id"])
-
-    with :ok <- authorize_admin(user),
-         {:ok, application} <- get_application_or_error(tenant, id),
-         {:ok, updated} <- Applications.update_application(application, update_params) do
-      render(conn, :updated, application: Repo.preload(updated, :api_keys))
-    end
-  end
 
   @doc """
   Deletes an application and revokes all its API keys.
