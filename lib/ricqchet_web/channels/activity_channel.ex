@@ -16,6 +16,7 @@ defmodule RicqchetWeb.ActivityChannel do
   @impl Phoenix.Channel
   def join("activity:tenant:" <> tenant_id, _params, socket) do
     if socket.assigns.tenant_id == tenant_id do
+      :ok = Phoenix.PubSub.subscribe(Ricqchet.PubSub, "activity:tenant:#{tenant_id}")
       Logger.debug("User #{socket.assigns.user_id} joined activity:tenant:#{tenant_id}")
       {:ok, socket}
     else

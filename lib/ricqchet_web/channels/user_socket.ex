@@ -3,6 +3,20 @@ defmodule RicqchetWeb.UserSocket do
   WebSocket entry point for real-time dashboard activity.
 
   Authenticates connections using JWT tokens passed in socket params.
+
+  ## Security Considerations
+
+  JWT tokens are passed via socket params (URL query string) during the WebSocket
+  handshake. This is a common pattern for WebSocket authentication since the
+  WebSocket API does not support custom headers during connection.
+
+  To mitigate token exposure risks:
+  - Use short-lived access tokens (configured in `Ricqchet.Auth.Token`)
+  - Ensure reverse proxies/load balancers do not log query parameters
+  - Tokens are validated for user status and token version on each connection
+
+  For enhanced security in production, consider implementing ticket-based auth
+  where a short-lived, single-use ticket is exchanged for the WebSocket connection.
   """
 
   use Phoenix.Socket

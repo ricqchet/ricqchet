@@ -146,12 +146,16 @@ defmodule Ricqchet.Messages do
           Repo.rollback(:none_available)
 
         message ->
-          message
-          |> Message.changeset(%{
-            status: "dispatched",
-            dispatched_at: now
-          })
-          |> Repo.update!()
+          updated =
+            message
+            |> Message.changeset(%{
+              status: "dispatched",
+              dispatched_at: now
+            })
+            |> Repo.update!()
+
+          ActivityEvents.message_dispatched(updated)
+          updated
       end
     end)
   end
@@ -190,9 +194,10 @@ defmodule Ricqchet.Messages do
   a DLQ notification if the application has a DLQ destination configured.
   """
   def mark_failed(%Message{} = message, error, response \\ nil) do
+    now = DateTime.utc_now()
     attempts = message.attempts + 1
     permanently_failed = attempts >= message.max_retries
-    changes = build_failure_changes(attempts, permanently_failed, error, response)
+    changes = build_failure_changes(now, attempts, permanently_failed, error, response)
 
     result =
       message
@@ -202,7 +207,7 @@ defmodule Ricqchet.Messages do
     handle_failure_result(result, permanently_failed)
   end
 
-  defp build_failure_changes(attempts, permanently_failed, error, response) do
+  defp build_failure_changes(now, attempts, permanently_failed, error, response) do
     base_changes = %{
       attempts: attempts,
       last_error: format_error(error),
@@ -210,18 +215,18 @@ defmodule Ricqchet.Messages do
       last_response_body: response && truncate_body(response[:body])
     }
 
-    status_changes = build_failure_status_changes(attempts, permanently_failed)
+    status_changes = build_failure_status_changes(now, attempts, permanently_failed)
     Map.merge(base_changes, status_changes)
   end
 
-  defp build_failure_status_changes(_attempts, true) do
-    %{status: "failed", completed_at: DateTime.utc_now()}
+  defp build_failure_status_changes(now, _attempts, true) do
+    %{status: "failed", completed_at: now}
   end
 
-  defp build_failure_status_changes(attempts, false) do
+  defp build_failure_status_changes(now, attempts, false) do
     %{
       status: "pending",
-      scheduled_at: DateTime.add(DateTime.utc_now(), backoff_seconds(attempts), :second)
+      scheduled_at: DateTime.add(now, backoff_seconds(attempts), :second)
     }
   end
 

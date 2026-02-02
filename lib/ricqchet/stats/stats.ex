@@ -56,7 +56,7 @@ defmodule Ricqchet.Stats do
       |> group_by([m], m.status)
       |> select([m], {m.status, count(m.id)})
       |> Repo.all()
-      |> Map.new(fn {status, cnt} -> {String.to_atom(status), cnt} end)
+      |> Map.new(&status_to_atom/1)
 
     # Ensure all statuses are present
     counts = Map.merge(%{pending: 0, dispatched: 0, delivered: 0, failed: 0}, raw_counts)
@@ -255,26 +255,40 @@ defmodule Ricqchet.Stats do
     limit = min(Keyword.get(opts, :limit, 10), 50)
     since = period_to_datetime(period)
 
-    failed_messages = fetch_failed_messages(tenant_id, since)
+    # Use SQL aggregations where possible to avoid loading all failed messages
+    total_errors = count_failed_messages(tenant_id, since)
+    by_status_code = aggregate_by_status_code_sql(tenant_id, since)
+    top_failing_destinations = aggregate_top_failing_destinations_sql(tenant_id, since, limit)
+
+    # We still fetch failed messages for error-type classification, which relies
+    # on classify_error/1 implemented in Elixir (parses error strings)
+    failed_messages = fetch_failed_messages_for_classification(tenant_id, since)
 
     %{
       period: period,
-      total_errors: Enum.count(failed_messages),
+      total_errors: total_errors,
       by_type: aggregate_by_error_type(failed_messages),
-      by_status_code: aggregate_by_status_code(failed_messages),
-      top_failing_destinations: aggregate_top_failing_destinations(failed_messages, limit)
+      by_status_code: by_status_code,
+      top_failing_destinations: top_failing_destinations
     }
   end
 
-  defp fetch_failed_messages(tenant_id, since) do
+  defp count_failed_messages(tenant_id, since) do
+    Message
+    |> where([m], m.tenant_id == ^tenant_id)
+    |> where([m], m.completed_at >= ^since)
+    |> where([m], m.status == "failed")
+    |> Repo.aggregate(:count, :id)
+  end
+
+  defp fetch_failed_messages_for_classification(tenant_id, since) do
     Message
     |> where([m], m.tenant_id == ^tenant_id)
     |> where([m], m.completed_at >= ^since)
     |> where([m], m.status == "failed")
     |> select([m], %{
       last_error: m.last_error,
-      last_response_status: m.last_response_status,
-      destination_url: m.destination_url
+      last_response_status: m.last_response_status
     })
     |> Repo.all()
   end
@@ -285,18 +299,29 @@ defmodule Ricqchet.Stats do
     |> Enum.frequencies()
   end
 
-  defp aggregate_by_status_code(messages) do
-    messages
-    |> Enum.filter(&(&1.last_response_status != nil))
-    |> Enum.frequencies_by(& &1.last_response_status)
+  defp aggregate_by_status_code_sql(tenant_id, since) do
+    Message
+    |> where([m], m.tenant_id == ^tenant_id)
+    |> where([m], m.completed_at >= ^since)
+    |> where([m], m.status == "failed")
+    |> where([m], not is_nil(m.last_response_status))
+    |> group_by([m], m.last_response_status)
+    |> select([m], {m.last_response_status, count(m.id)})
+    |> Repo.all()
+    |> Map.new(fn {status, count} -> {Integer.to_string(status), count} end)
   end
 
-  defp aggregate_top_failing_destinations(messages, limit) do
-    messages
-    |> Enum.frequencies_by(& &1.destination_url)
-    |> Enum.map(fn {url, count} -> %{url: url, count: count} end)
-    |> Enum.sort_by(& &1.count, :desc)
-    |> Enum.take(limit)
+  defp aggregate_top_failing_destinations_sql(tenant_id, since, limit) do
+    Message
+    |> where([m], m.tenant_id == ^tenant_id)
+    |> where([m], m.completed_at >= ^since)
+    |> where([m], m.status == "failed")
+    |> where([m], not is_nil(m.destination_url))
+    |> group_by([m], m.destination_url)
+    |> select([m], %{url: m.destination_url, count: count(m.id)})
+    |> order_by([m], desc: count(m.id))
+    |> limit(^limit)
+    |> Repo.all()
   end
 
   defp classify_error(%{last_response_status: status}) when is_integer(status) and status >= 500,
@@ -525,4 +550,11 @@ defmodule Ricqchet.Stats do
 
   defp to_integer(n) when is_float(n), do: round(n)
   defp to_integer(n) when is_integer(n), do: n
+
+  # Convert status strings to atoms safely (avoiding atom table exhaustion)
+  defp status_to_atom({"pending", cnt}), do: {:pending, cnt}
+  defp status_to_atom({"dispatched", cnt}), do: {:dispatched, cnt}
+  defp status_to_atom({"delivered", cnt}), do: {:delivered, cnt}
+  defp status_to_atom({"failed", cnt}), do: {:failed, cnt}
+  defp status_to_atom({_unknown, cnt}), do: {:other, cnt}
 end

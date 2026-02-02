@@ -122,9 +122,9 @@ defmodule Ricqchet.Messages.Message do
 
   defp calculate_payload_size(attrs) do
     case get_attr(attrs, :payload) do
-      nil -> 0
+      nil -> nil
       payload when is_binary(payload) -> byte_size(payload)
-      _other -> 0
+      _other -> nil
     end
   end
 
