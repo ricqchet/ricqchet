@@ -9,6 +9,7 @@ defmodule Ricqchet.Auth do
   import Ecto.Query
 
   alias Ricqchet.Auth.EmailVerificationToken
+  alias Ricqchet.Auth.PasswordResetToken
   alias Ricqchet.Auth.RefreshToken
   alias Ricqchet.Auth.Token
   alias Ricqchet.Repo
@@ -207,6 +208,107 @@ defmodule Ricqchet.Auth do
   end
 
   @doc """
+  Requests a password reset for a user by email.
+
+  If the email exists, creates a password reset token and returns it.
+  If the email doesn't exist, returns `{:ok, nil}` to prevent email enumeration.
+
+  ## Examples
+
+      iex> request_password_reset("user@example.com")
+      {:ok, %{user: %User{}, reset_token: "abc..."}}
+
+      iex> request_password_reset("nonexistent@example.com")
+      {:ok, nil}
+  """
+  def request_password_reset(email) when is_binary(email) do
+    case Users.get_user_by_email(email) do
+      nil ->
+        # Perform dummy token generation to prevent timing attacks
+        # This ensures both paths take similar time
+        _ = PasswordResetToken.generate_token()
+        _ = PasswordResetToken.hash_token("dummy")
+        {:ok, nil}
+
+      user ->
+        case create_password_reset_token(user) do
+          {:ok, token} ->
+            {:ok, %{user: user, reset_token: token.token}}
+
+          error ->
+            error
+        end
+    end
+  end
+
+  @doc """
+  Resets a user's password using a password reset token.
+
+  Validates the token, updates the password, invalidates the token,
+  and optionally invalidates all existing sessions.
+
+  ## Examples
+
+      iex> reset_password("reset-token", "newpassword123")
+      {:ok, %User{}}
+
+      iex> reset_password("invalid-token", "newpassword")
+      {:error, :invalid_token}
+  """
+  def reset_password(token_string, new_password) do
+    with {:ok, reset_token} <- validate_reset_token(token_string),
+         {:ok, user} <- Users.update_password(reset_token.user, new_password),
+         {:ok, updated_user} <- invalidate_sessions_and_cleanup(user) do
+      {:ok, Repo.preload(updated_user, :tenant)}
+    else
+      {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
+      error -> error
+    end
+  end
+
+  defp validate_reset_token(token_string) do
+    with {:ok, reset_token} <- get_password_reset_token_by_token(token_string),
+         true <- PasswordResetToken.valid?(reset_token) do
+      {:ok, Repo.preload(reset_token, :user)}
+    else
+      false -> {:error, :token_expired}
+      {:error, :not_found} -> {:error, :invalid_token}
+    end
+  end
+
+  defp invalidate_sessions_and_cleanup(user) do
+    with {:ok, updated_user} <- Users.increment_token_version(user),
+         :ok <- revoke_all_refresh_tokens_for_user(user),
+         {:ok, _} <- delete_password_reset_tokens_for_user(user) do
+      {:ok, updated_user}
+    end
+  end
+
+  @doc """
+  Creates a new password reset token for a user.
+
+  Deletes any existing reset tokens for the user first, atomically.
+
+  ## Examples
+
+      iex> create_password_reset_token(user)
+      {:ok, %PasswordResetToken{token: "abc..."}}
+  """
+  def create_password_reset_token(%User{} = user) do
+    Repo.transaction(fn ->
+      # Delete existing tokens first
+      delete_password_reset_tokens_for_user(user)
+
+      case %PasswordResetToken{}
+           |> PasswordResetToken.create_changeset(user)
+           |> Repo.insert() do
+        {:ok, token} -> token
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
+  end
+
+  @doc """
   Creates a refresh token for a user.
   """
   def create_refresh_token(%User{} = user) do
@@ -303,6 +405,28 @@ defmodule Ricqchet.Auth do
 
   defp delete_email_verification_tokens_for_user(%User{id: user_id}) do
     EmailVerificationToken
+    |> where([t], t.user_id == ^user_id)
+    |> Repo.delete_all()
+
+    {:ok, :deleted}
+  end
+
+  defp get_password_reset_token_by_token(token_string) when is_binary(token_string) do
+    token_hash = PasswordResetToken.hash_token(token_string)
+
+    result =
+      PasswordResetToken
+      |> where([t], t.token_hash == ^token_hash)
+      |> Repo.one()
+
+    case result do
+      nil -> {:error, :not_found}
+      token -> {:ok, token}
+    end
+  end
+
+  defp delete_password_reset_tokens_for_user(%User{id: user_id}) do
+    PasswordResetToken
     |> where([t], t.user_id == ^user_id)
     |> Repo.delete_all()
 

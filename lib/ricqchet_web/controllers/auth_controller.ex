@@ -122,6 +122,117 @@ defmodule RicqchetWeb.AuthController do
     end
   end
 
+  operation(:forgot_password,
+    summary: "Request password reset",
+    description: """
+    Initiates a password reset by sending a reset link to the provided email address.
+    For security reasons, this endpoint always returns success, even if the email
+    doesn't exist in the system (to prevent email enumeration).
+    """,
+    request_body:
+      {"Email address", "application/json", Schemas.Auth.ForgotPasswordRequest, required: true},
+    responses: %{
+      200 =>
+        {"Reset email sent (if account exists)", "application/json", Schemas.Auth.MessageResponse},
+      422 => {"Validation error", "application/json", Schemas.ErrorResponse}
+    }
+  )
+
+  @doc """
+  Requests a password reset for the given email.
+  """
+  def forgot_password(conn, %{"email" => email}) do
+    case Auth.request_password_reset(email) do
+      {:ok, nil} ->
+        # Email doesn't exist, but we return success to prevent enumeration
+        render_password_reset_response(conn)
+
+      {:ok, %{user: user, reset_token: token}} ->
+        # Send password reset email with error handling to prevent crashes
+        reset_url = build_reset_url(token)
+        send_password_reset_email(user.email, reset_url)
+        render_password_reset_response(conn)
+
+      {:error, _reason} ->
+        # Log the error but still return success to prevent enumeration
+        require Logger
+        Logger.error("Failed to create password reset token for email")
+        render_password_reset_response(conn)
+    end
+  end
+
+  def forgot_password(conn, _params) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: "validation_error", message: "Email is required"})
+  end
+
+  defp send_password_reset_email(email, reset_url) do
+    email
+    |> Email.password_reset_email(reset_url)
+    |> Mailer.deliver()
+  rescue
+    error ->
+      require Logger
+      Logger.error("Failed to send password reset email: #{inspect(error)}")
+      :error
+  end
+
+  defp render_password_reset_response(conn) do
+    conn
+    |> put_status(:ok)
+    |> render(:message,
+      message: "If an account exists with that email, a password reset link has been sent"
+    )
+  end
+
+  operation(:reset_password,
+    summary: "Complete password reset",
+    description: """
+    Completes a password reset using the token received via email. The token must be
+    valid and not expired (tokens expire after 1 hour). After a successful reset,
+    all existing sessions are invalidated.
+    """,
+    request_body:
+      {"Reset token and new password", "application/json", Schemas.Auth.ResetPasswordRequest,
+       required: true},
+    responses: %{
+      200 => {"Password reset successful", "application/json", Schemas.Auth.MessageResponse},
+      400 => {"Invalid or expired token", "application/json", Schemas.ErrorResponse},
+      422 => {"Validation error", "application/json", Schemas.ErrorResponse}
+    }
+  )
+
+  @doc """
+  Resets a user's password using a valid reset token.
+  """
+  def reset_password(conn, %{"token" => token, "password" => password}) do
+    case Auth.reset_password(token, password) do
+      {:ok, _user} ->
+        conn
+        |> put_status(:ok)
+        |> render(:message,
+          message:
+            "Password has been reset successfully. You can now log in with your new password."
+        )
+
+      {:error, :invalid_token} ->
+        {:error, :bad_request, "Invalid password reset token"}
+
+      {:error, :token_expired} ->
+        {:error, :bad_request, "Password reset token has expired"}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  def reset_password(conn, _params) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: "validation_error", message: "Token and password are required"})
+  end
+
   operation(:login,
     summary: "Log in a user",
     description: """
@@ -288,5 +399,10 @@ defmodule RicqchetWeb.AuthController do
   defp build_verification_url(token) do
     base_url = Application.get_env(:ricqchet, :frontend_url, "http://localhost:4000")
     "#{base_url}/verify-email?token=#{token}"
+  end
+
+  defp build_reset_url(token) do
+    base_url = Application.get_env(:ricqchet, :frontend_url, "http://localhost:4000")
+    "#{base_url}/reset-password?token=#{token}"
   end
 end

@@ -128,6 +128,17 @@ defmodule Ricqchet.Users do
   end
 
   @doc """
+  Updates a user's password directly (without requiring current password).
+
+  Used for password reset flows where the user has verified identity via token.
+  """
+  def update_password(%User{} = user, new_password) do
+    user
+    |> User.password_changeset(%{password: new_password})
+    |> Repo.update()
+  end
+
+  @doc """
   Updates the last_login_at timestamp for a user.
   """
   def touch_last_login(%User{} = user) do
