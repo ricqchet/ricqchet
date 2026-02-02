@@ -104,6 +104,32 @@ defmodule Ricqchet.Users do
   end
 
   @doc """
+  Lists users for a tenant with pagination, filtering, and sorting.
+
+  ## Examples
+
+      iex> list_users_for_tenant_paginated(tenant, %{"first" => 10})
+      {:ok, {[%User{}], %Flop.Meta{}}}
+
+  """
+  @spec list_users_for_tenant_paginated(Tenant.t(), map()) ::
+          {:ok, {[User.t()], Flop.Meta.t()}} | {:error, Flop.Meta.t()}
+  def list_users_for_tenant_paginated(%Tenant{id: tenant_id}, params \\ %{}) do
+    User
+    |> where([u], u.tenant_id == ^tenant_id)
+    |> Flop.validate_and_run(params, for: User)
+  end
+
+  @doc """
+  Gets a user by ID scoped to a tenant.
+  """
+  def get_user_by_tenant(%Tenant{id: tenant_id}, user_id) do
+    User
+    |> where([u], u.id == ^user_id and u.tenant_id == ^tenant_id)
+    |> Repo.one()
+  end
+
+  @doc """
   Updates a user.
   """
   def update_user(%User{} = user, attrs) do

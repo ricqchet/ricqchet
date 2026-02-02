@@ -396,6 +396,58 @@ defmodule RicqchetWeb.AuthController do
     })
   end
 
+  operation(:accept_invite,
+    summary: "Accept tenant invitation",
+    description: """
+    Accepts an invitation to join a tenant. Creates a new user account for the
+    invited email address and returns JWT tokens for immediate authentication.
+
+    Returns an error if a user with that email already exists in the tenant.
+    """,
+    request_body:
+      {"Invitation acceptance", "application/json", Schemas.Auth.AcceptInviteRequest,
+       required: true},
+    responses: %{
+      200 => {"Invitation accepted", "application/json", Schemas.Auth.AcceptInviteResponse},
+      400 => {"Invalid or expired token", "application/json", Schemas.ErrorResponse},
+      409 => {"User already exists", "application/json", Schemas.ErrorResponse},
+      422 => {"Validation error", "application/json", Schemas.ErrorResponse}
+    }
+  )
+
+  @doc """
+  Accepts an invitation to join a tenant.
+  """
+  def accept_invite(conn, %{"token" => token, "password" => password}) do
+    case Auth.accept_invitation(token, password) do
+      {:ok, auth_data} ->
+        conn
+        |> put_status(:ok)
+        |> render(:logged_in, auth_data)
+
+      {:error, :invalid_token} ->
+        {:error, :invalid_token}
+
+      {:error, :token_expired} ->
+        {:error, :token_expired}
+
+      {:error, :invitation_not_pending} ->
+        {:error, :invitation_not_pending}
+
+      {:error, :user_already_exists} ->
+        {:error, :user_already_exists}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  def accept_invite(conn, _params) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: "validation_error", message: "Token and password are required"})
+  end
+
   defp build_verification_url(token) do
     base_url = Application.get_env(:ricqchet, :frontend_url, "http://localhost:4000")
     "#{base_url}/verify-email?token=#{token}"

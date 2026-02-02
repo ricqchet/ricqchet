@@ -13,6 +13,17 @@ defmodule Ricqchet.Users.User do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
+  # Flop configuration for pagination, filtering, and sorting.
+  @derive {
+    Flop.Schema,
+    filterable: [:email, :role, :status],
+    sortable: [:email, :role, :status, :inserted_at, :updated_at, :last_login_at],
+    default_order: %{
+      order_by: [:inserted_at],
+      order_directions: [:desc]
+    }
+  }
+
   @type t :: %__MODULE__{
           id: Ecto.UUID.t() | nil,
           email: String.t() | nil,
