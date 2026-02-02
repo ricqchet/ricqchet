@@ -75,6 +75,18 @@ defmodule RicqchetWeb.Router do
     post "/api-keys/:id/rotate", ApiKeyController, :rotate
   end
 
+  # Dashboard statistics endpoints (JWT auth required)
+  scope "/v1/stats", RicqchetWeb do
+    pipe_through [:api, :jwt_authenticated]
+
+    get "/messages", StatsController, :messages
+    get "/message-sizes", StatsController, :message_sizes
+    get "/delivery", StatsController, :delivery
+    get "/errors", StatsController, :errors
+    get "/destinations", StatsController, :destinations
+    get "/activity", StatsController, :activity
+  end
+
   # API v1 endpoints (API key auth required for relay operations)
   scope "/v1", RicqchetWeb do
     pipe_through [:api, :authenticated]

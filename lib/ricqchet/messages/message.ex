@@ -24,6 +24,7 @@ defmodule Ricqchet.Messages.Message do
     field :payload, :binary
     field :content_type, :string, default: "application/json"
     field :headers, :map, default: %{}
+    field :payload_size_bytes, :integer
 
     field :status, :string, default: "pending"
 
@@ -58,6 +59,7 @@ defmodule Ricqchet.Messages.Message do
       :payload,
       :content_type,
       :headers,
+      :payload_size_bytes,
       :status,
       :attempts,
       :max_retries,
@@ -99,6 +101,7 @@ defmodule Ricqchet.Messages.Message do
       |> Map.put(:dedup_expires_at, calculate_dedup_expires_at(attrs, now))
       |> Map.put(:flow_control_key, "#{tenant.id}:#{destination_url}")
       |> Map.put(:max_retries, get_attr(attrs, :max_retries) || tenant.default_max_retries)
+      |> Map.put(:payload_size_bytes, calculate_payload_size(attrs))
 
     changeset(message, attrs)
   end
@@ -114,6 +117,14 @@ defmodule Ricqchet.Messages.Message do
     case get_attr(attrs, :dedup_key) do
       nil -> nil
       _key -> DateTime.add(now, get_attr(attrs, :dedup_ttl) || 300, :second)
+    end
+  end
+
+  defp calculate_payload_size(attrs) do
+    case get_attr(attrs, :payload) do
+      nil -> 0
+      payload when is_binary(payload) -> byte_size(payload)
+      _other -> 0
     end
   end
 

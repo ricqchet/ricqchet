@@ -6,6 +6,7 @@ defmodule Ricqchet.Messages do
   import Ecto.Query
   import Ricqchet.DeliveryHelpers
 
+  alias Ricqchet.ActivityEvents
   alias Ricqchet.Messages.Message
   alias Ricqchet.Repo
   alias Ricqchet.Tenants.Tenant
@@ -30,9 +31,19 @@ defmodule Ricqchet.Messages do
   def create(%Tenant{} = tenant, attrs, application \\ nil) do
     attrs = maybe_add_application_id(attrs, application)
 
-    %Message{}
-    |> Message.create_changeset(tenant, attrs)
-    |> Repo.insert()
+    result =
+      %Message{}
+      |> Message.create_changeset(tenant, attrs)
+      |> Repo.insert()
+
+    case result do
+      {:ok, message} ->
+        ActivityEvents.message_created(message)
+        {:ok, message}
+
+      error ->
+        error
+    end
   end
 
   defp maybe_add_application_id(attrs, nil), do: attrs
@@ -151,15 +162,25 @@ defmodule Ricqchet.Messages do
   def mark_delivered(%Message{} = message, response) do
     now = DateTime.utc_now()
 
-    message
-    |> Message.changeset(%{
-      status: "delivered",
-      completed_at: now,
-      attempts: message.attempts + 1,
-      last_response_status: response.status,
-      last_response_body: truncate_body(response.body)
-    })
-    |> Repo.update()
+    result =
+      message
+      |> Message.changeset(%{
+        status: "delivered",
+        completed_at: now,
+        attempts: message.attempts + 1,
+        last_response_status: response.status,
+        last_response_body: truncate_body(response.body)
+      })
+      |> Repo.update()
+
+    case result do
+      {:ok, updated_message} ->
+        ActivityEvents.message_delivered(updated_message)
+        {:ok, updated_message}
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -170,9 +191,18 @@ defmodule Ricqchet.Messages do
   """
   def mark_failed(%Message{} = message, error, response \\ nil) do
     attempts = message.attempts + 1
-    now = DateTime.utc_now()
     permanently_failed = attempts >= message.max_retries
+    changes = build_failure_changes(attempts, permanently_failed, error, response)
 
+    result =
+      message
+      |> Message.changeset(changes)
+      |> Repo.update()
+
+    handle_failure_result(result, permanently_failed)
+  end
+
+  defp build_failure_changes(attempts, permanently_failed, error, response) do
     base_changes = %{
       attempts: attempts,
       last_error: format_error(error),
@@ -180,27 +210,33 @@ defmodule Ricqchet.Messages do
       last_response_body: response && truncate_body(response[:body])
     }
 
-    status_changes =
-      if permanently_failed do
-        %{status: "failed", completed_at: now}
-      else
-        %{status: "pending", scheduled_at: DateTime.add(now, backoff_seconds(attempts), :second)}
-      end
-
-    result =
-      message
-      |> Message.changeset(Map.merge(base_changes, status_changes))
-      |> Repo.update()
-
-    case result do
-      {:ok, updated_message} when permanently_failed ->
-        Ricqchet.Dlq.maybe_notify_failure(updated_message)
-        {:ok, updated_message}
-
-      other ->
-        other
-    end
+    status_changes = build_failure_status_changes(attempts, permanently_failed)
+    Map.merge(base_changes, status_changes)
   end
+
+  defp build_failure_status_changes(_attempts, true) do
+    %{status: "failed", completed_at: DateTime.utc_now()}
+  end
+
+  defp build_failure_status_changes(attempts, false) do
+    %{
+      status: "pending",
+      scheduled_at: DateTime.add(DateTime.utc_now(), backoff_seconds(attempts), :second)
+    }
+  end
+
+  defp handle_failure_result({:ok, message}, true) do
+    ActivityEvents.message_failed(message, will_retry: false)
+    Ricqchet.Dlq.maybe_notify_failure(message)
+    {:ok, message}
+  end
+
+  defp handle_failure_result({:ok, message}, false) do
+    ActivityEvents.message_failed(message, will_retry: true)
+    {:ok, message}
+  end
+
+  defp handle_failure_result(error, _permanently_failed), do: error
 
   @doc """
   Cancels a pending message.
