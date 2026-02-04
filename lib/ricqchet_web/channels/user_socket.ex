@@ -62,7 +62,7 @@ defmodule RicqchetWeb.UserSocket do
     end
   end
 
-  defp load_and_validate_user(%{"sub" => user_id, "token_version" => token_version}) do
+  defp load_and_validate_user(%{"sub" => user_id, "ver" => token_version}) do
     case Users.get_user(user_id) do
       nil ->
         {:error, :user_not_found}
