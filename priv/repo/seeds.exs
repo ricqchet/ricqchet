@@ -18,10 +18,12 @@ alias Ricqchet.Users
 # Seed data configuration
 tenant_name = "Demo Organization"
 user_email = "admin@demo.local"
+
 user_password =
   :crypto.strong_rand_bytes(32)
   |> Base.url_encode64(padding: false)
   |> binary_part(0, 24)
+
 application_name = "Demo Application"
 api_key_name = "Development Key"
 
@@ -31,9 +33,10 @@ IO.puts("\n🌱 Seeding database...\n")
 {:ok, tenant} = Tenants.create_tenant(%{name: tenant_name})
 IO.puts("✓ Created tenant: #{tenant.name}")
 
-# Create user
+# Create user and verify email (no email delivery in dev, so confirm immediately)
 {:ok, user} = Users.create_user(tenant, %{email: user_email, password: user_password})
-IO.puts("✓ Created user: #{user.email}")
+{:ok, user} = Users.confirm_user(user)
+IO.puts("✓ Created user: #{user.email} (verified)")
 
 # Create application
 {:ok, application} = Applications.create_application(tenant, %{name: application_name})
