@@ -18,6 +18,14 @@ defmodule Ricqchet.FlowControl do
   - Rate limit: Sliding window with 1-second granularity
 
   When limits are exceeded, messages are rescheduled with a delay.
+
+  ## Error Handling
+
+  This module uses a **fail-open** strategy: if database queries fail,
+  messages are allowed through rather than being blocked. This prevents
+  database issues from causing complete delivery stoppages, though it
+  means flow control may be temporarily bypassed during database problems.
+  The ReconciliationWorker corrects any resulting state drift.
   """
 
   require Logger

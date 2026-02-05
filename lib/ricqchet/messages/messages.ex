@@ -305,9 +305,13 @@ defmodule Ricqchet.Messages do
   Reverts a dispatched message back to pending status.
 
   Used when job queue insertion fails to prevent messages from being
-  stuck in "dispatched" status forever.
+  stuck in "dispatched" status forever. Also releases the flow control
+  slot that was acquired during claim_next_pending.
   """
   def revert_to_pending(%Message{status: "dispatched"} = message) do
+    # Release the flow control slot acquired during claim_next_pending
+    FlowControl.release_slot(message)
+
     message
     |> Message.changeset(%{
       status: "pending",

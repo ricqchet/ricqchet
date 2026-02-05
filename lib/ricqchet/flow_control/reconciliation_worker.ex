@@ -24,7 +24,10 @@ defmodule Ricqchet.FlowControl.ReconciliationWorker do
   end
 
   defp reconcile_in_flight_counts do
-    # Update in_flight_count to match actual dispatched messages
+    # Update in_flight_count to match actual dispatched messages.
+    # We reconcile all entries (not just in_flight > 0) to catch both upward
+    # and downward drift. Downward drift (count=0 but messages dispatched)
+    # could prevent legitimate flow control from working.
     query = """
     UPDATE flow_control_state fcs
     SET in_flight_count = COALESCE(
@@ -35,12 +38,18 @@ defmodule Ricqchet.FlowControl.ReconciliationWorker do
       0
     ),
     updated_at = NOW()
-    WHERE fcs.in_flight_count > 0
+    WHERE fcs.in_flight_count != COALESCE(
+      (SELECT COUNT(*)
+       FROM messages m
+       WHERE m.destination_id = fcs.destination_id
+         AND m.status = 'dispatched'),
+      0
+    )
     """
 
     case Repo.query(query) do
       {:ok, %{num_rows: rows}} when rows > 0 ->
-        Logger.info("Flow control reconciliation updated #{rows} entries")
+        Logger.info("Flow control reconciliation corrected #{rows} entries")
 
       {:ok, _} ->
         :ok

@@ -34,6 +34,8 @@ defmodule Ricqchet.FlowControl.SettingsCache do
     case :ets.lookup(@table_name, destination_id) do
       [{^destination_id, parallelism, rate_limit, cached_at}] ->
         if expired?(cached_at) do
+          # Clean up expired entry to prevent memory accumulation
+          :ets.delete(@table_name, destination_id)
           :miss
         else
           {:ok, {parallelism, rate_limit}}
