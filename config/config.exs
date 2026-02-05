@@ -25,7 +25,14 @@ config :ricqchet, RicqchetWeb.Endpoint,
 # Configure Oban for job processing
 config :ricqchet, Oban,
   repo: Ricqchet.Repo,
-  plugins: [Oban.Plugins.Pruner],
+  plugins: [
+    Oban.Plugins.Pruner,
+    {Oban.Plugins.Cron,
+     crontab: [
+       # Flow control reconciliation - runs every minute
+       {"* * * * *", Ricqchet.FlowControl.ReconciliationWorker}
+     ]}
+  ],
   queues: [delivery: 50, dlq_notifications: 10]
 
 # Batch delivery configuration

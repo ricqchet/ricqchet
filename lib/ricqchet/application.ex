@@ -13,7 +13,8 @@ defmodule Ricqchet.Application do
         Ricqchet.Repo,
         {DNSCluster, query: Application.get_env(:ricqchet, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Ricqchet.PubSub},
-        {Oban, Application.fetch_env!(:ricqchet, Oban)}
+        {Oban, Application.fetch_env!(:ricqchet, Oban)},
+        Ricqchet.FlowControl.SettingsCache
       ]
       |> Enum.concat(dispatcher_child())
       |> Enum.concat(batch_dispatcher_child())
