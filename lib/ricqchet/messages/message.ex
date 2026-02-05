@@ -41,11 +41,10 @@ defmodule Ricqchet.Messages.Message do
     field :dedup_key, :string
     field :dedup_expires_at, :utc_datetime_usec
 
-    field :flow_control_key, :string
-
     belongs_to :tenant, Ricqchet.Tenants.Tenant
     belongs_to :application, Ricqchet.Applications.Application
     belongs_to :batch, Ricqchet.Batches.Batch
+    belongs_to :destination, Ricqchet.FlowControl.Destination
 
     timestamps(type: :utc_datetime_usec)
   end
@@ -71,16 +70,17 @@ defmodule Ricqchet.Messages.Message do
       :completed_at,
       :dedup_key,
       :dedup_expires_at,
-      :flow_control_key,
       :tenant_id,
       :application_id,
-      :batch_id
+      :batch_id,
+      :destination_id
     ])
-    |> validate_required([:destination_url, :scheduled_at, :flow_control_key, :tenant_id])
+    |> validate_required([:destination_url, :scheduled_at, :tenant_id])
     |> validate_inclusion(:status, @statuses)
     |> validate_inclusion(:method, ~w(GET POST PUT PATCH DELETE HEAD OPTIONS))
     |> validate_url(:destination_url)
     |> foreign_key_constraint(:tenant_id)
+    |> foreign_key_constraint(:destination_id)
     |> unique_constraint([:tenant_id, :dedup_key],
       name: :messages_dedup_index,
       message: "duplicate message"
@@ -89,17 +89,17 @@ defmodule Ricqchet.Messages.Message do
 
   @doc """
   Changeset for creating a new message.
+
+  The destination_id should be set by the caller after upserting the destination.
   """
   def create_changeset(message, tenant, attrs) do
     now = DateTime.utc_now()
-    destination_url = get_attr(attrs, :destination_url)
 
     attrs =
       attrs
       |> Map.put(:tenant_id, tenant.id)
       |> Map.put(:scheduled_at, calculate_scheduled_at(attrs, now))
       |> Map.put(:dedup_expires_at, calculate_dedup_expires_at(attrs, now))
-      |> Map.put(:flow_control_key, "#{tenant.id}:#{destination_url}")
       |> Map.put(:max_retries, get_attr(attrs, :max_retries) || tenant.default_max_retries)
       |> Map.put(:payload_size_bytes, calculate_payload_size(attrs))
 

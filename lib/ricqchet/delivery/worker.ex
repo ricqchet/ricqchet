@@ -13,6 +13,7 @@ defmodule Ricqchet.Delivery.Worker do
   require Logger
 
   alias Ricqchet.Delivery.HttpClient
+  alias Ricqchet.FlowControl
   alias Ricqchet.Messages
 
   @impl Oban.Worker
@@ -33,10 +34,14 @@ defmodule Ricqchet.Delivery.Worker do
       "Delivering message #{message.id} to #{message.destination_url} (attempt #{message.attempts + 1})"
     )
 
-    result = HttpClient.deliver(message)
-    handle_result(message, result)
-
-    :ok
+    try do
+      result = HttpClient.deliver(message)
+      handle_result(message, result)
+      :ok
+    after
+      # Always release flow control slot, regardless of success/failure
+      FlowControl.release_slot(message)
+    end
   end
 
   defp handle_result(message, {:ok, %{status: status} = response}) when status in 200..299 do
