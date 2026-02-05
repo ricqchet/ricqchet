@@ -94,10 +94,20 @@ defmodule Ricqchet.FlowControl do
     now = DateTime.utc_now()
 
     # Check parallelism first (if configured), then rate limit
-    with :ok <- check_parallelism(destination_id, parallelism, now) do
-      check_rate_limit(destination_id, rate_limit, now)
+    # If rate limit fails after parallelism succeeds, we must release the slot
+    with :ok <- check_parallelism(destination_id, parallelism, now),
+         :ok <- check_rate_limit(destination_id, rate_limit, now) do
+      :ok
+    else
+      {:delay, _} = delay ->
+        # Rate limit exceeded after parallelism succeeded - release the slot
+        maybe_release_slot(destination_id, parallelism)
+        delay
     end
   end
+
+  defp maybe_release_slot(_destination_id, nil), do: :ok
+  defp maybe_release_slot(destination_id, _parallelism), do: do_release_slot(destination_id)
 
   defp check_parallelism(_destination_id, nil, _now), do: :ok
 
