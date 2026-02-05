@@ -7,12 +7,15 @@
 #
 #     Ricqchet.Repo.insert!(%Ricqchet.SomeSchema{})
 #
-# We recommend using the bang functions (`insert!`, `update!`
-# and so on) as they will fail if something goes wrong.
+# This seed file is idempotent - safe to run multiple times.
+
+import Ecto.Query
 
 alias Ricqchet.ApiKeys
 alias Ricqchet.Applications
+alias Ricqchet.Repo
 alias Ricqchet.Tenants
+alias Ricqchet.Tenants.Tenant
 alias Ricqchet.Users
 
 # Seed data configuration
@@ -29,22 +32,59 @@ api_key_name = "Development Key"
 
 IO.puts("\n🌱 Seeding database...\n")
 
-# Create tenant
-{:ok, tenant} = Tenants.create_tenant(%{name: tenant_name})
-IO.puts("✓ Created tenant: #{tenant.name}")
+# Find or create tenant
+tenant =
+  case Repo.one(from t in Tenant, where: t.name == ^tenant_name, limit: 1) do
+    nil ->
+      {:ok, tenant} = Tenants.create_tenant(%{name: tenant_name})
+      IO.puts("✓ Created tenant: #{tenant.name}")
+      tenant
 
-# Create user and verify email (no email delivery in dev, so confirm immediately)
-{:ok, user} = Users.create_user(tenant, %{email: user_email, password: user_password})
-{:ok, user} = Users.confirm_user(user)
-IO.puts("✓ Created user: #{user.email} (verified)")
+    existing ->
+      IO.puts("✓ Found existing tenant: #{existing.name}")
+      existing
+  end
 
-# Create application
-{:ok, application} = Applications.create_application(tenant, %{name: application_name})
-IO.puts("✓ Created application: #{application.name}")
+# Find or create user
+{user, password_info} =
+  case Users.get_user_by_email(user_email) do
+    nil ->
+      {:ok, user} = Users.create_user(tenant, %{email: user_email, password: user_password})
+      {:ok, user} = Users.confirm_user(user)
+      IO.puts("✓ Created user: #{user.email} (verified)")
+      {user, user_password}
 
-# Create API key
-{:ok, api_key} = ApiKeys.create_api_key(application, %{name: api_key_name})
-IO.puts("✓ Created API key: #{api_key.name}")
+    existing ->
+      IO.puts("✓ Found existing user: #{existing.email}")
+      {existing, "(unchanged)"}
+  end
+
+# Find or create application
+application =
+  with {:ok, {applications, _meta}} <- Applications.list_applications_for_tenant(tenant),
+       nil <- Enum.find(applications, &(&1.name == application_name)) do
+    {:ok, application} = Applications.create_application(tenant, %{name: application_name})
+    IO.puts("✓ Created application: #{application.name}")
+    application
+  else
+    %Ricqchet.Applications.Application{} = existing ->
+      IO.puts("✓ Found existing application: #{existing.name}")
+      existing
+  end
+
+# Find or create API key
+{_api_key, api_key_info} =
+  case ApiKeys.list_api_keys_for_application(application)
+       |> Enum.find(&(&1.name == api_key_name)) do
+    nil ->
+      {:ok, api_key} = ApiKeys.create_api_key(application, %{name: api_key_name})
+      IO.puts("✓ Created API key: #{api_key.name}")
+      {api_key, api_key.api_key}
+
+    existing ->
+      IO.puts("✓ Found existing API key: #{existing.name}")
+      {existing, "(already exists - cannot retrieve)"}
+  end
 
 # Output credentials
 IO.puts("""
@@ -57,12 +97,12 @@ IO.puts("""
   Tenant ID:   #{tenant.id}
 
   User Email:  #{user.email}
-  Password:    #{user_password}
+  Password:    #{password_info}
 
   Application: #{application.name}
   App ID:      #{application.id}
 
-  API Key:     #{api_key.api_key}
+  API Key:     #{api_key_info}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
