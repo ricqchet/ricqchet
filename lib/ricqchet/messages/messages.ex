@@ -193,7 +193,9 @@ defmodule Ricqchet.Messages do
   end
 
   defp reschedule_for_flow_control(message, delay_seconds) do
-    new_scheduled_at = DateTime.add(DateTime.utc_now(), trunc(delay_seconds * 1000), :millisecond)
+    # Use ceil to ensure at least 1ms delay, avoiding zero-delay rescheduling
+    delay_ms = max(ceil(delay_seconds * 1000), 1)
+    new_scheduled_at = DateTime.add(DateTime.utc_now(), delay_ms, :millisecond)
 
     message
     |> Message.changeset(%{scheduled_at: new_scheduled_at})
