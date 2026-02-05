@@ -14,7 +14,9 @@ defmodule Ricqchet.Application do
         {DNSCluster, query: Application.get_env(:ricqchet, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Ricqchet.PubSub},
         {Oban, Application.fetch_env!(:ricqchet, Oban)},
-        Ricqchet.FlowControl.SettingsCache
+        Ricqchet.FlowControl.SettingsCache,
+        Ricqchet.FlowControl.ReconciliationWorker,
+        RicqchetWeb.Plugs.RateLimiter.ETSTable
       ]
       |> Enum.concat(dispatcher_child())
       |> Enum.concat(batch_dispatcher_child())

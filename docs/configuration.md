@@ -68,6 +68,35 @@ config :ricqchet, Ricqchet.BatchDispatcher,
 config :ricqchet, :batch_dispatcher_enabled, false
 ```
 
+## Flow Control
+
+Flow control manages per-destination parallelism and rate limits to prevent overwhelming webhook endpoints.
+
+### Backend
+
+The flow control backend determines how state is tracked. Currently PostgreSQL is supported, with the architecture designed for easy addition of alternative backends (e.g., Redis).
+
+```elixir
+# config/config.exs
+config :ricqchet,
+  flow_control_backend: Ricqchet.FlowControl.Backends.Postgres
+```
+
+### Reconciliation
+
+A background process periodically reconciles flow control state to correct drift from node crashes or bugs. The interval is configurable:
+
+```elixir
+# config/config.exs
+config :ricqchet,
+  flow_control_reconciliation_interval_ms: 10_000  # 10 seconds (default)
+
+# To disable reconciliation (e.g., in tests)
+config :ricqchet, flow_control_reconciliation_interval_ms: false
+```
+
+Lower intervals provide faster drift correction at the cost of more database queries. The default of 10 seconds balances accuracy with load.
+
 ## Database
 
 ### PostgreSQL Connection
