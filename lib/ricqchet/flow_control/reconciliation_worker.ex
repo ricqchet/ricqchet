@@ -2,32 +2,72 @@ defmodule Ricqchet.FlowControl.ReconciliationWorker do
   @moduledoc """
   Periodic reconciliation of flow control state.
 
-  Runs every minute to correct any drift from node crashes or bugs by
-  reconciling `in_flight_count` with actual dispatched messages.
+  Runs on a configurable interval (default 10 seconds) to correct any
+  drift from node crashes or bugs by reconciling `in_flight_count` with
+  actual dispatched messages.
 
   Also cleans up stale state entries.
+
+  ## Configuration
+
+      config :ricqchet,
+        flow_control_reconciliation_interval_ms: 10_000
+
+  Set to `false` to disable reconciliation (useful in tests).
   """
 
-  use Oban.Worker,
-    queue: :default,
-    max_attempts: 1
+  use GenServer
 
   require Logger
 
   alias Ricqchet.Repo
 
-  @impl Oban.Worker
-  def perform(_job) do
-    reconcile_in_flight_counts()
-    cleanup_stale_state()
-    :ok
+  @default_interval_ms 10_000
+
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @impl GenServer
+  def init(opts) do
+    interval = Keyword.get(opts, :interval_ms, configured_interval())
+
+    if interval do
+      schedule_reconciliation(interval)
+      {:ok, %{interval: interval}}
+    else
+      :ignore
+    end
+  end
+
+  @impl GenServer
+  def handle_info(:reconcile, state) do
+    {duration_us, rows_corrected} =
+      :timer.tc(fn ->
+        rows_corrected = reconcile_in_flight_counts()
+        cleanup_stale_state()
+        rows_corrected
+      end)
+
+    :telemetry.execute(
+      [:ricqchet, :flow_control, :reconciliation],
+      %{duration: duration_us},
+      %{rows_corrected: rows_corrected}
+    )
+
+    schedule_reconciliation(state.interval)
+    {:noreply, state}
+  end
+
+  defp schedule_reconciliation(interval_ms) do
+    Process.send_after(self(), :reconcile, interval_ms)
+  end
+
+  defp configured_interval do
+    Application.get_env(:ricqchet, :flow_control_reconciliation_interval_ms, @default_interval_ms)
   end
 
   defp reconcile_in_flight_counts do
-    # Update in_flight_count to match actual dispatched messages.
-    # We reconcile all entries (not just in_flight > 0) to catch both upward
-    # and downward drift. Downward drift (count=0 but messages dispatched)
-    # could prevent legitimate flow control from working.
     query = """
     UPDATE flow_control_state fcs
     SET in_flight_count = COALESCE(
@@ -49,19 +89,25 @@ defmodule Ricqchet.FlowControl.ReconciliationWorker do
 
     case Repo.query(query) do
       {:ok, %{num_rows: rows}} when rows > 0 ->
-        Logger.info("Flow control reconciliation corrected #{rows} entries")
+        Logger.info("Flow control reconciliation corrected entries",
+          rows_corrected: rows
+        )
+
+        rows
 
       {:ok, _} ->
-        :ok
+        0
 
       {:error, reason} ->
-        Logger.warning("Flow control reconciliation failed: #{inspect(reason)}")
+        Logger.warning("Flow control reconciliation failed",
+          error: inspect(reason)
+        )
+
+        0
     end
   end
 
   defp cleanup_stale_state do
-    # Remove state entries that have been idle for over 24 hours
-    # and have no in-flight messages
     cutoff = DateTime.add(DateTime.utc_now(), -24, :hour)
 
     query = """
@@ -73,13 +119,17 @@ defmodule Ricqchet.FlowControl.ReconciliationWorker do
 
     case Repo.query(query, [cutoff]) do
       {:ok, %{num_rows: rows}} when rows > 0 ->
-        Logger.info("Flow control cleanup removed #{rows} stale entries")
+        Logger.info("Flow control cleanup removed stale entries",
+          rows_removed: rows
+        )
 
       {:ok, _} ->
         :ok
 
       {:error, reason} ->
-        Logger.warning("Flow control cleanup failed: #{inspect(reason)}")
+        Logger.warning("Flow control cleanup failed",
+          error: inspect(reason)
+        )
     end
   end
 end
