@@ -6,6 +6,7 @@ defmodule Ricqchet.FlowControl.Destinations do
   import Ecto.Query
 
   alias Ricqchet.FlowControl.Destination
+  alias Ricqchet.FlowControl.SettingsCache
   alias Ricqchet.Repo
   alias Ricqchet.Tenants.Tenant
 
@@ -46,9 +47,19 @@ defmodule Ricqchet.FlowControl.Destinations do
   Updates a destination's flow control settings.
   """
   def update(%Destination{} = destination, attrs) do
-    destination
-    |> Destination.changeset(attrs)
-    |> Repo.update()
+    result =
+      destination
+      |> Destination.changeset(attrs)
+      |> Repo.update()
+
+    case result do
+      {:ok, updated} ->
+        SettingsCache.invalidate(updated.id)
+        {:ok, updated}
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -71,24 +82,13 @@ defmodule Ricqchet.FlowControl.Destinations do
   @doc """
   Upserts a destination - creates if not exists, updates if flow_control provided.
 
-  Uses database-level upsert for atomicity.
+  Uses database-level upsert for atomicity. Only updates flow_control settings
+  that are explicitly provided (doesn't overwrite existing settings with nil).
   """
   def upsert(%Tenant{} = tenant, destination_url, flow_control \\ nil) do
     now = DateTime.utc_now()
     attrs = build_attrs(destination_url, flow_control)
-
-    conflict_updates =
-      if flow_control do
-        [
-          set: [
-            parallelism: flow_control[:parallelism],
-            rate_limit: flow_control[:rate_limit],
-            updated_at: now
-          ]
-        ]
-      else
-        [set: [updated_at: now]]
-      end
+    conflict_updates = build_conflict_updates(flow_control, now)
 
     result =
       %Destination{}
@@ -100,8 +100,37 @@ defmodule Ricqchet.FlowControl.Destinations do
       )
 
     case result do
-      {:ok, destination} -> {:ok, destination}
-      {:error, changeset} -> {:error, changeset}
+      {:ok, destination} ->
+        # Invalidate cache when settings may have changed
+        if flow_control, do: SettingsCache.invalidate(destination.id)
+        {:ok, destination}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  defp build_conflict_updates(nil, now) do
+    [set: [updated_at: now]]
+  end
+
+  defp build_conflict_updates(flow_control, now) do
+    # Only include keys that are explicitly present in flow_control
+    # to avoid overwriting existing settings with nil
+    updates =
+      []
+      |> maybe_add_setting(:parallelism, flow_control)
+      |> maybe_add_setting(:rate_limit, flow_control)
+      |> Keyword.put(:updated_at, now)
+
+    [set: updates]
+  end
+
+  defp maybe_add_setting(updates, key, flow_control) do
+    if Map.has_key?(flow_control, key) do
+      Keyword.put(updates, key, flow_control[key])
+    else
+      updates
     end
   end
 
@@ -129,11 +158,32 @@ defmodule Ricqchet.FlowControl.Destinations do
   defp maybe_update_settings(destination, nil), do: {:ok, destination}
 
   defp maybe_update_settings(destination, flow_control) do
-    destination
-    |> Destination.changeset(%{
-      parallelism: flow_control[:parallelism],
-      rate_limit: flow_control[:rate_limit]
-    })
-    |> Repo.update()
+    # Only include keys that are explicitly present
+    changes =
+      %{}
+      |> maybe_put_setting(:parallelism, flow_control)
+      |> maybe_put_setting(:rate_limit, flow_control)
+
+    result =
+      destination
+      |> Destination.changeset(changes)
+      |> Repo.update()
+
+    case result do
+      {:ok, updated} ->
+        SettingsCache.invalidate(updated.id)
+        {:ok, updated}
+
+      error ->
+        error
+    end
+  end
+
+  defp maybe_put_setting(changes, key, flow_control) do
+    if Map.has_key?(flow_control, key) do
+      Map.put(changes, key, flow_control[key])
+    else
+      changes
+    end
   end
 end
