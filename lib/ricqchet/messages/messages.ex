@@ -7,6 +7,8 @@ defmodule Ricqchet.Messages do
   import Ricqchet.DeliveryHelpers
 
   alias Ricqchet.ActivityEvents
+  alias Ricqchet.FlowControl
+  alias Ricqchet.FlowControl.Destinations
   alias Ricqchet.Messages.Message
   alias Ricqchet.Repo
   alias Ricqchet.Tenants.Tenant
@@ -26,23 +28,32 @@ defmodule Ricqchet.Messages do
     * `:dedup_ttl` - Deduplication TTL in seconds (default: 300).
     * `:max_retries` - Override max retries (default: tenant's default).
     * `:application` - Optional. The application creating the message.
+    * `:flow_control` - Optional. Flow control settings `%{parallelism: int, rate_limit: int}`.
 
   """
   def create(%Tenant{} = tenant, attrs, application \\ nil) do
-    attrs = maybe_add_application_id(attrs, application)
+    destination_url = get_attr(attrs, :destination_url)
+    flow_control = get_attr(attrs, :flow_control)
 
-    result =
-      %Message{}
-      |> Message.create_changeset(tenant, attrs)
-      |> Repo.insert()
+    with {:ok, destination} <- Destinations.upsert(tenant, destination_url, flow_control) do
+      attrs =
+        attrs
+        |> maybe_add_application_id(application)
+        |> Map.put(:destination_id, destination.id)
 
-    case result do
-      {:ok, message} ->
-        ActivityEvents.message_created(message)
-        {:ok, message}
+      result =
+        %Message{}
+        |> Message.create_changeset(tenant, attrs)
+        |> Repo.insert()
 
-      error ->
-        error
+      case result do
+        {:ok, message} ->
+          ActivityEvents.message_created(message)
+          {:ok, message}
+
+        error ->
+          error
+      end
     end
   end
 
@@ -57,14 +68,20 @@ defmodule Ricqchet.Messages do
   the batch is dispatched.
   """
   def create_for_batch(%Tenant{} = tenant, batch, attrs, application \\ nil) do
-    attrs =
-      attrs
-      |> Map.put(:batch_id, batch.id)
-      |> maybe_add_application_id(application)
+    destination_url = get_attr(attrs, :destination_url)
+    flow_control = get_attr(attrs, :flow_control)
 
-    %Message{}
-    |> Message.create_changeset(tenant, attrs)
-    |> Repo.insert()
+    with {:ok, destination} <- Destinations.upsert(tenant, destination_url, flow_control) do
+      attrs =
+        attrs
+        |> Map.put(:batch_id, batch.id)
+        |> Map.put(:destination_id, destination.id)
+        |> maybe_add_application_id(application)
+
+      %Message{}
+      |> Message.create_changeset(tenant, attrs)
+      |> Repo.insert()
+    end
   end
 
   @doc """
@@ -123,10 +140,12 @@ defmodule Ricqchet.Messages do
   Claims the next pending message for delivery.
 
   Uses `FOR UPDATE SKIP LOCKED` for safe concurrent access across
-  multiple nodes.
+  multiple nodes. Respects flow control limits - if a message's destination
+  is at capacity, it will be rescheduled.
 
   Returns `{:ok, message}` if a message was claimed, or
-  `{:error, :none_available}` if no pending messages.
+  `{:error, :none_available}` if no pending messages,
+  `{:error, :flow_control_delayed}` if message was rescheduled due to limits.
   """
   def claim_next_pending do
     now = DateTime.utc_now()
@@ -141,23 +160,46 @@ defmodule Ricqchet.Messages do
         lock: "FOR UPDATE SKIP LOCKED"
 
     Repo.transaction(fn ->
-      case Repo.one(query) do
-        nil ->
-          Repo.rollback(:none_available)
-
-        message ->
-          updated =
-            message
-            |> Message.changeset(%{
-              status: "dispatched",
-              dispatched_at: now
-            })
-            |> Repo.update!()
-
-          ActivityEvents.message_dispatched(updated)
-          updated
-      end
+      query
+      |> Repo.one()
+      |> claim_message_or_rollback(now)
     end)
+  end
+
+  defp claim_message_or_rollback(nil, _now), do: Repo.rollback(:none_available)
+
+  defp claim_message_or_rollback(message, now) do
+    case FlowControl.acquire_slot(message) do
+      :ok ->
+        dispatch_message(message, now)
+
+      {:delay, seconds} ->
+        reschedule_for_flow_control(message, seconds)
+        Repo.rollback(:flow_control_delayed)
+    end
+  end
+
+  defp dispatch_message(message, now) do
+    updated =
+      message
+      |> Message.changeset(%{
+        status: "dispatched",
+        dispatched_at: now
+      })
+      |> Repo.update!()
+
+    ActivityEvents.message_dispatched(updated)
+    updated
+  end
+
+  defp reschedule_for_flow_control(message, delay_seconds) do
+    # Use ceil to ensure at least 1ms delay, avoiding zero-delay rescheduling
+    delay_ms = max(ceil(delay_seconds * 1000), 1)
+    new_scheduled_at = DateTime.add(DateTime.utc_now(), delay_ms, :millisecond)
+
+    message
+    |> Message.changeset(%{scheduled_at: new_scheduled_at})
+    |> Repo.update!()
   end
 
   @doc """
@@ -263,9 +305,13 @@ defmodule Ricqchet.Messages do
   Reverts a dispatched message back to pending status.
 
   Used when job queue insertion fails to prevent messages from being
-  stuck in "dispatched" status forever.
+  stuck in "dispatched" status forever. Also releases the flow control
+  slot that was acquired during claim_next_pending.
   """
   def revert_to_pending(%Message{status: "dispatched"} = message) do
+    # Release the flow control slot acquired during claim_next_pending
+    FlowControl.release_slot(message)
+
     message
     |> Message.changeset(%{
       status: "pending",
@@ -275,4 +321,8 @@ defmodule Ricqchet.Messages do
   end
 
   def revert_to_pending(%Message{} = message), do: {:ok, message}
+
+  defp get_attr(attrs, key) do
+    Map.get(attrs, key) || Map.get(attrs, to_string(key))
+  end
 end

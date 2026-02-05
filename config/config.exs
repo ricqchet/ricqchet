@@ -25,8 +25,15 @@ config :ricqchet, RicqchetWeb.Endpoint,
 # Configure Oban for job processing
 config :ricqchet, Oban,
   repo: Ricqchet.Repo,
-  plugins: [Oban.Plugins.Pruner],
-  queues: [delivery: 50, dlq_notifications: 10]
+  plugins: [
+    Oban.Plugins.Pruner,
+    {Oban.Plugins.Cron,
+     crontab: [
+       # Flow control reconciliation - runs every minute
+       {"* * * * *", Ricqchet.FlowControl.ReconciliationWorker}
+     ]}
+  ],
+  queues: [default: 5, delivery: 50, dlq_notifications: 10]
 
 # Batch delivery configuration
 config :ricqchet,
@@ -60,7 +67,7 @@ config :ricqchet, Ricqchet.Mailer, adapter: Swoosh.Adapters.Local
 # Configure Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id]
+  metadata: [:request_id, :destination_id, :limit, :delay, :error]
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
