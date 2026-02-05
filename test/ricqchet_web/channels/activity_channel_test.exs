@@ -23,9 +23,9 @@ defmodule RicqchetWeb.ActivityChannelTest do
         })
 
       assert_receive {:activity_event, payload}
-      assert payload.type == "message:created"
       assert payload.id == message.id
-      assert payload.entity == "message"
+      assert payload.status == "pending"
+      assert payload.destination_url == "https://example.com/webhook"
     end
 
     test "broadcasts message delivered event", %{tenant: tenant} do
@@ -51,8 +51,8 @@ defmodule RicqchetWeb.ActivityChannelTest do
       {:ok, _delivered} = Messages.mark_delivered(dispatched, %{status: 200, body: "OK"})
 
       assert_receive {:activity_event, payload}
-      assert payload.type == "message:delivered"
-      assert payload.data.status_code == 200
+      assert payload.status == "delivered"
+      assert payload.last_response_status == 200
     end
 
     test "broadcasts message failed event with retry", %{tenant: tenant} do
@@ -79,8 +79,8 @@ defmodule RicqchetWeb.ActivityChannelTest do
       {:ok, _failed} = Messages.mark_failed(dispatched, "Connection refused")
 
       assert_receive {:activity_event, payload}
-      assert payload.type == "message:retrying"
-      assert payload.data.error == "Connection refused"
+      assert payload.status == "retrying"
+      assert payload.last_error == "Connection refused"
     end
 
     test "broadcasts message permanently failed event", %{tenant: tenant} do
@@ -107,10 +107,10 @@ defmodule RicqchetWeb.ActivityChannelTest do
       {:ok, _failed} = Messages.mark_failed(dispatched, "Connection refused")
 
       assert_receive {:activity_event, payload}
-      assert payload.type == "message:failed"
+      assert payload.status == "failed"
     end
 
-    test "includes timestamp in events", %{tenant: tenant} do
+    test "includes created_at in events", %{tenant: tenant} do
       Phoenix.PubSub.subscribe(Ricqchet.PubSub, "activity:tenant:#{tenant.id}")
 
       {:ok, _message} =
@@ -120,7 +120,7 @@ defmodule RicqchetWeb.ActivityChannelTest do
         })
 
       assert_receive {:activity_event, payload}
-      assert %DateTime{} = payload.timestamp
+      assert %DateTime{} = payload.created_at
     end
   end
 
@@ -133,15 +133,21 @@ defmodule RicqchetWeb.ActivityChannelTest do
         tenant_id: tenant.id,
         destination_url: "https://example.com/test",
         status: "pending",
+        attempts: 0,
+        last_error: nil,
+        last_response_status: nil,
+        payload_size_bytes: 100,
         application_id: nil,
-        payload_size_bytes: 100
+        inserted_at: DateTime.utc_now(),
+        completed_at: nil
       }
 
       ActivityEvents.message_created(message)
 
       assert_receive {:activity_event, payload}
-      assert payload.type == "message:created"
       assert payload.id == message.id
+      assert payload.status == "pending"
+      assert payload.destination_url == "https://example.com/test"
     end
 
     test "does not broadcast to other tenants", %{tenant: tenant} do
@@ -154,8 +160,13 @@ defmodule RicqchetWeb.ActivityChannelTest do
         tenant_id: tenant.id,
         destination_url: "https://example.com/test",
         status: "pending",
+        attempts: 0,
+        last_error: nil,
+        last_response_status: nil,
+        payload_size_bytes: 100,
         application_id: nil,
-        payload_size_bytes: 100
+        inserted_at: DateTime.utc_now(),
+        completed_at: nil
       }
 
       ActivityEvents.message_created(message)
