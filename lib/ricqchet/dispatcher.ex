@@ -62,6 +62,10 @@ defmodule Ricqchet.Dispatcher do
 
       {:error, :none_available} ->
         :ok
+
+      {:error, :flow_control_delayed} ->
+        # Message was rescheduled due to flow control limits, continue polling
+        dispatch_pending(remaining - 1)
     end
   end
 
