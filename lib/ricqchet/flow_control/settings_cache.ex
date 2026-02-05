@@ -15,6 +15,7 @@ defmodule Ricqchet.FlowControl.SettingsCache do
   use GenServer
 
   @table_name :flow_control_settings_cache
+  @ttl_key :__ttl__
   @default_ttl_ms 60_000
 
   # Client API
@@ -74,12 +75,9 @@ defmodule Ricqchet.FlowControl.SettingsCache do
   def init(opts) do
     ttl_ms = Keyword.get(opts, :ttl_ms, @default_ttl_ms)
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
+    # Store TTL in ETS to avoid GenServer calls on the hot path
+    :ets.insert(@table_name, {@ttl_key, ttl_ms})
     {:ok, %{ttl_ms: ttl_ms}}
-  end
-
-  @impl GenServer
-  def handle_call(:get_ttl, _from, %{ttl_ms: ttl_ms} = state) do
-    {:reply, ttl_ms, state}
   end
 
   # Private
@@ -91,8 +89,9 @@ defmodule Ricqchet.FlowControl.SettingsCache do
   end
 
   defp get_ttl do
-    GenServer.call(__MODULE__, :get_ttl)
-  catch
-    :exit, _ -> @default_ttl_ms
+    case :ets.lookup(@table_name, @ttl_key) do
+      [{@ttl_key, ttl_ms}] -> ttl_ms
+      [] -> @default_ttl_ms
+    end
   end
 end
