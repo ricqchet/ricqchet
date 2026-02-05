@@ -33,7 +33,7 @@ config :ricqchet, Oban,
        {"* * * * *", Ricqchet.FlowControl.ReconciliationWorker}
      ]}
   ],
-  queues: [delivery: 50, dlq_notifications: 10]
+  queues: [default: 5, delivery: 50, dlq_notifications: 10]
 
 # Batch delivery configuration
 config :ricqchet,
