@@ -22,9 +22,10 @@ defmodule RicqchetWeb.Plugs.RateLimiter do
 
   import Plug.Conn
 
+  alias RicqchetWeb.Plugs.RateLimiter.ETSTable
+
   @behaviour Plug
 
-  @table_name :ricqchet_rate_limiter
   @default_requests_per_second 100
   @default_burst_size 200
   @window_ms 1000
@@ -34,8 +35,6 @@ defmodule RicqchetWeb.Plugs.RateLimiter do
 
   @impl Plug
   def call(conn, _opts) do
-    ensure_table_exists()
-
     case get_tenant_key(conn) do
       nil -> conn
       tenant_key -> check_rate_limit(conn, tenant_key)
@@ -60,16 +59,6 @@ defmodule RicqchetWeb.Plugs.RateLimiter do
     |> halt()
   end
 
-  defp ensure_table_exists do
-    case :ets.whereis(@table_name) do
-      :undefined ->
-        :ets.new(@table_name, [:named_table, :public, :set, {:write_concurrency, true}])
-
-      _ ->
-        :ok
-    end
-  end
-
   defp get_tenant_key(conn) do
     case conn.assigns[:current_tenant] do
       %{id: id} -> "tenant:#{id}"
@@ -80,44 +69,45 @@ defmodule RicqchetWeb.Plugs.RateLimiter do
   defp allowed?(key) do
     now = System.system_time(:millisecond)
     {requests_per_second, burst_size} = get_limits()
+    table = ETSTable.table_name()
 
-    case :ets.lookup(@table_name, key) do
+    case :ets.lookup(table, key) do
       [] ->
-        init_window(key, now)
+        init_window(table, key, now)
 
       [{^key, count, window_start}] ->
-        check_window(key, count, window_start, now, requests_per_second, burst_size)
+        check_window(table, key, count, window_start, now, requests_per_second, burst_size)
     end
   end
 
-  defp init_window(key, now) do
-    :ets.insert(@table_name, {key, 1, now})
+  defp init_window(table, key, now) do
+    :ets.insert(table, {key, 1, now})
     true
   end
 
-  defp check_window(key, count, window_start, now, requests_per_second, burst_size) do
+  defp check_window(table, key, count, window_start, now, requests_per_second, burst_size) do
     window_expired = now - window_start >= @window_ms
 
     cond do
       window_expired ->
-        :ets.insert(@table_name, {key, 1, now})
+        :ets.insert(table, {key, 1, now})
         true
 
       count < burst_size ->
-        :ets.update_counter(@table_name, key, {2, 1})
+        :ets.update_counter(table, key, {2, 1})
         true
 
       true ->
-        check_rate(key, count, window_start, now, requests_per_second)
+        check_rate(table, key, count, window_start, now, requests_per_second)
     end
   end
 
-  defp check_rate(key, count, window_start, now, requests_per_second) do
+  defp check_rate(table, key, count, window_start, now, requests_per_second) do
     elapsed_ms = max(now - window_start, 1)
     rate = count * 1000 / elapsed_ms
 
     if rate < requests_per_second do
-      :ets.update_counter(@table_name, key, {2, 1})
+      :ets.update_counter(table, key, {2, 1})
       true
     else
       false
@@ -135,9 +125,11 @@ defmodule RicqchetWeb.Plugs.RateLimiter do
   Clears the rate limiter state. Useful for testing.
   """
   def reset do
-    case :ets.whereis(@table_name) do
+    table = ETSTable.table_name()
+
+    case :ets.whereis(table) do
       :undefined -> :ok
-      _ -> :ets.delete_all_objects(@table_name)
+      _ -> :ets.delete_all_objects(table)
     end
   end
 end
