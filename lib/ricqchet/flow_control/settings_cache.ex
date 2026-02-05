@@ -70,14 +70,14 @@ defmodule Ricqchet.FlowControl.SettingsCache do
 
   # Server Callbacks
 
-  @impl true
+  @impl GenServer
   def init(opts) do
     ttl_ms = Keyword.get(opts, :ttl_ms, @default_ttl_ms)
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
     {:ok, %{ttl_ms: ttl_ms}}
   end
 
-  @impl true
+  @impl GenServer
   def handle_call(:get_ttl, _from, %{ttl_ms: ttl_ms} = state) do
     {:reply, ttl_ms, state}
   end
@@ -91,10 +91,8 @@ defmodule Ricqchet.FlowControl.SettingsCache do
   end
 
   defp get_ttl do
-    try do
-      GenServer.call(__MODULE__, :get_ttl)
-    catch
-      :exit, _ -> @default_ttl_ms
-    end
+    GenServer.call(__MODULE__, :get_ttl)
+  catch
+    :exit, _ -> @default_ttl_ms
   end
 end

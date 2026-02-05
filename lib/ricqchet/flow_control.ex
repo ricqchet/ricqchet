@@ -20,13 +20,10 @@ defmodule Ricqchet.FlowControl do
   When limits are exceeded, messages are rescheduled with a delay.
   """
 
-  import Ecto.Query
   require Logger
 
   alias Ricqchet.FlowControl.Destination
-  alias Ricqchet.FlowControl.Destinations
   alias Ricqchet.FlowControl.SettingsCache
-  alias Ricqchet.FlowControl.State
   alias Ricqchet.Messages.Message
   alias Ricqchet.Repo
 
@@ -96,10 +93,9 @@ defmodule Ricqchet.FlowControl do
   defp do_acquire_slot(destination_id, parallelism, rate_limit) do
     now = DateTime.utc_now()
 
-    # Check parallelism first (if configured)
-    with :ok <- check_parallelism(destination_id, parallelism, now),
-         :ok <- check_rate_limit(destination_id, rate_limit, now) do
-      :ok
+    # Check parallelism first (if configured), then rate limit
+    with :ok <- check_parallelism(destination_id, parallelism, now) do
+      check_rate_limit(destination_id, rate_limit, now)
     end
   end
 
@@ -125,11 +121,13 @@ defmodule Ricqchet.FlowControl do
       {:ok, %{num_rows: 0}} ->
         # Limit exceeded
         delay = calculate_parallelism_delay()
+
         Logger.debug("Flow control: parallelism limit reached",
           destination_id: destination_id,
           limit: limit,
           delay: delay
         )
+
         {:delay, delay}
 
       {:error, reason} ->
@@ -137,6 +135,7 @@ defmodule Ricqchet.FlowControl do
           destination_id: destination_id,
           error: inspect(reason)
         )
+
         # Allow dispatch on error to avoid blocking
         :ok
     end
@@ -174,11 +173,13 @@ defmodule Ricqchet.FlowControl do
       {:ok, %{num_rows: 0}} ->
         # Rate limit exceeded
         delay = calculate_rate_limit_delay(window_start)
+
         Logger.debug("Flow control: rate limit reached",
           destination_id: destination_id,
           limit: limit,
           delay: delay
         )
+
         {:delay, delay}
 
       {:error, reason} ->
@@ -186,6 +187,7 @@ defmodule Ricqchet.FlowControl do
           destination_id: destination_id,
           error: inspect(reason)
         )
+
         :ok
     end
   end

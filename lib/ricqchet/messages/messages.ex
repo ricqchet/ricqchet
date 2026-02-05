@@ -160,21 +160,23 @@ defmodule Ricqchet.Messages do
         lock: "FOR UPDATE SKIP LOCKED"
 
     Repo.transaction(fn ->
-      case Repo.one(query) do
-        nil ->
-          Repo.rollback(:none_available)
-
-        message ->
-          case FlowControl.acquire_slot(message) do
-            :ok ->
-              dispatch_message(message, now)
-
-            {:delay, seconds} ->
-              reschedule_for_flow_control(message, seconds)
-              Repo.rollback(:flow_control_delayed)
-          end
-      end
+      query
+      |> Repo.one()
+      |> claim_message_or_rollback(now)
     end)
+  end
+
+  defp claim_message_or_rollback(nil, _now), do: Repo.rollback(:none_available)
+
+  defp claim_message_or_rollback(message, now) do
+    case FlowControl.acquire_slot(message) do
+      :ok ->
+        dispatch_message(message, now)
+
+      {:delay, seconds} ->
+        reschedule_for_flow_control(message, seconds)
+        Repo.rollback(:flow_control_delayed)
+    end
   end
 
   defp dispatch_message(message, now) do

@@ -73,19 +73,9 @@ defmodule Ricqchet.FlowControl.Destinations do
 
   Uses database-level upsert for atomicity.
   """
-  def upsert(%Tenant{id: tenant_id} = tenant, destination_url, flow_control \\ nil) do
+  def upsert(%Tenant{} = tenant, destination_url, flow_control \\ nil) do
     now = DateTime.utc_now()
     attrs = build_attrs(destination_url, flow_control)
-
-    base_values = %{
-      id: Ecto.UUID.generate(),
-      tenant_id: tenant_id,
-      destination_url: destination_url,
-      inserted_at: now,
-      updated_at: now
-    }
-
-    values = Map.merge(base_values, flow_control_values(flow_control))
 
     conflict_updates =
       if flow_control do
@@ -136,21 +126,14 @@ defmodule Ricqchet.FlowControl.Destinations do
     }
   end
 
-  defp flow_control_values(nil), do: %{}
-
-  defp flow_control_values(flow_control) do
-    %{
-      parallelism: flow_control[:parallelism],
-      rate_limit: flow_control[:rate_limit]
-    }
-  end
-
   defp maybe_update_settings(destination, nil), do: {:ok, destination}
 
   defp maybe_update_settings(destination, flow_control) do
-    update(destination, %{
+    destination
+    |> Destination.changeset(%{
       parallelism: flow_control[:parallelism],
       rate_limit: flow_control[:rate_limit]
     })
+    |> Repo.update()
   end
 end
