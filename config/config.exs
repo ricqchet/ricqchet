@@ -85,7 +85,9 @@ config :logger, :default_formatter,
     :status,
     :reason,
     :ttl_deleted,
-    :trimmed
+    :trimmed,
+    :event,
+    :url
   ]
 
 # Use Jason for JSON parsing in Phoenix

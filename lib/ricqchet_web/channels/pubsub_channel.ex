@@ -27,6 +27,7 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   alias Ricqchet.Channels.History
   alias Ricqchet.Channels.NamespaceConfig
   alias Ricqchet.Channels.SubscriberTracker
+  alias Ricqchet.Channels.WebhookNotifier
   alias RicqchetWeb.Channels.ChannelSocket
   alias RicqchetWeb.Channels.Presence
 
@@ -113,6 +114,12 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
       })
 
     push(socket, "presence_state", Presence.list(socket))
+
+    enqueue_webhook("member:added", socket.assigns.application_id, socket.assigns.channel_name,
+      user_id: user_id,
+      user_info: user_info
+    )
+
     {:noreply, socket}
   end
 
@@ -151,7 +158,16 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   def terminate(_reason, socket) do
     case parse_topic_from_socket(socket) do
       {:ok, app_id, channel_name} ->
-        SubscriberTracker.track_leave(app_id, channel_name)
+        if SubscriberTracker.track_leave(app_id, channel_name) == :last_subscriber do
+          enqueue_webhook("channel:vacated", app_id, channel_name)
+        end
+
+        if channel_type(channel_name) == :presence do
+          enqueue_webhook("member:removed", app_id, channel_name,
+            user_id: socket.assigns[:user_id],
+            user_info: socket.assigns[:user_info]
+          )
+        end
 
       :error ->
         :ok
@@ -208,7 +224,10 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   defp do_join(app_id, channel_name, last_event_id, socket) do
     topic = "channels:app:#{app_id}:#{channel_name}"
     Phoenix.PubSub.subscribe(Ricqchet.PubSub, topic)
-    SubscriberTracker.track_join(app_id, channel_name)
+
+    if SubscriberTracker.track_join(app_id, channel_name) == :first_subscriber do
+      enqueue_webhook("channel:occupied", app_id, channel_name)
+    end
 
     if last_event_id do
       send(self(), {:recover_events, app_id, channel_name, last_event_id})
@@ -270,6 +289,20 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     case socket.topic do
       "channels:app:" <> rest -> parse_topic(rest)
       _ -> :error
+    end
+  end
+
+  defp enqueue_webhook(event, app_id, channel_name, opts \\ []) do
+    %{application_id: app_id, channel_name: channel_name}
+    |> maybe_put_opt(:user_id, opts)
+    |> maybe_put_opt(:user_info, opts)
+    |> then(&WebhookNotifier.enqueue(event, &1))
+  end
+
+  defp maybe_put_opt(map, key, opts) do
+    case Keyword.get(opts, key) do
+      nil -> map
+      value -> Map.put(map, key, value)
     end
   end
 end
