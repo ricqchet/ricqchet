@@ -65,7 +65,20 @@ config :ricqchet, Ricqchet.Mailer, adapter: Swoosh.Adapters.Local
 # Configure Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id, :destination_id, :limit, :delay, :error, :rows_corrected, :rows_removed]
+  metadata: [
+    :request_id,
+    :destination_id,
+    :limit,
+    :delay,
+    :error,
+    :rows_corrected,
+    :rows_removed,
+    :application_id,
+    :channel,
+    :endpoint,
+    :status,
+    :reason
+  ]
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason

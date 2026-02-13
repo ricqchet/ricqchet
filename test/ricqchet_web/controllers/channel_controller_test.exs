@@ -121,7 +121,7 @@ defmodule RicqchetWeb.ChannelControllerTest do
       assert json_response(conn, 422)
     end
 
-    test "rejects private channel prefix", %{conn: conn} do
+    test "accepts private channel prefix", %{conn: conn} do
       conn =
         post(conn, "/v1/channels/events", %{
           "channel" => "private-room",
@@ -129,7 +129,7 @@ defmodule RicqchetWeb.ChannelControllerTest do
           "data" => %{}
         })
 
-      assert json_response(conn, 422)
+      assert json_response(conn, 202)
     end
 
     test "returns 403 when channels not enabled", %{conn: conn, application: app} do

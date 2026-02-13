@@ -3,10 +3,14 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
 
   import Ricqchet.DataCase, only: [create_tenant_with_api_key: 0]
 
+  alias Ricqchet.Channels.NamespaceCache
+  alias Ricqchet.Channels.Namespaces
   alias Ricqchet.Channels.SubscriberTracker
   alias RicqchetWeb.Channels.ChannelSocket
 
   setup do
+    NamespaceCache.invalidate_all()
+
     {:ok, %{tenant: tenant, application: app, api_key: api_key}} =
       create_tenant_with_api_key()
 
@@ -21,10 +25,20 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         "user_id" => "user_123"
       })
 
-    %{socket: socket, application: application, tenant: tenant}
+    %{socket: socket, application: application, tenant: tenant, api_key: api_key}
   end
 
-  describe "join/3" do
+  defp reconnect_socket(api_key) do
+    {:ok, socket} =
+      connect(ChannelSocket, %{
+        "api_key" => api_key.api_key,
+        "user_id" => "user_123"
+      })
+
+    socket
+  end
+
+  describe "join/3 - public channels" do
     test "joins a public channel", %{socket: socket, application: app} do
       topic = "channels:app:#{app.id}:chat-room"
       assert {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
@@ -40,20 +54,6 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       other_app_id = Ecto.UUID.generate()
       topic = "channels:app:#{other_app_id}:chat-room"
       assert {:error, %{reason: "unauthorized"}} = subscribe_and_join(socket, topic, %{})
-    end
-
-    test "rejects private channel in Phase 1", %{socket: socket, application: app} do
-      topic = "channels:app:#{app.id}:private-room"
-
-      assert {:error, %{reason: "private and presence" <> _}} =
-               subscribe_and_join(socket, topic, %{})
-    end
-
-    test "rejects presence channel in Phase 1", %{socket: socket, application: app} do
-      topic = "channels:app:#{app.id}:presence-lobby"
-
-      assert {:error, %{reason: "private and presence" <> _}} =
-               subscribe_and_join(socket, topic, %{})
     end
 
     test "rejects invalid channel name", %{socket: socket, application: app} do
@@ -80,6 +80,150 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
     test "rejects invalid topic format", %{socket: socket} do
       assert {:error, %{reason: "invalid_topic"}} =
                subscribe_and_join(socket, "channels:bad", %{})
+    end
+  end
+
+  describe "join/3 - private channels" do
+    test "joins private channel with auth endpoint approval", %{
+      application: app,
+      api_key: api_key
+    } do
+      bypass = Bypass.open()
+
+      app
+      |> Ecto.Changeset.change(channels_auth_endpoint: "http://localhost:#{bypass.port}/auth")
+      |> Ricqchet.Repo.update!()
+
+      socket = reconnect_socket(api_key)
+
+      Bypass.expect_once(bypass, "POST", "/auth", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{ok: true}))
+      end)
+
+      topic = "channels:app:#{app.id}:private-room"
+      assert {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+    end
+
+    test "rejects private channel when auth returns 403", %{
+      application: app,
+      api_key: api_key
+    } do
+      bypass = Bypass.open()
+
+      app
+      |> Ecto.Changeset.change(channels_auth_endpoint: "http://localhost:#{bypass.port}/auth")
+      |> Ricqchet.Repo.update!()
+
+      socket = reconnect_socket(api_key)
+
+      Bypass.expect_once(bypass, "POST", "/auth", fn conn ->
+        Plug.Conn.resp(conn, 403, "Forbidden")
+      end)
+
+      topic = "channels:app:#{app.id}:private-room"
+      assert {:error, %{reason: "forbidden"}} = subscribe_and_join(socket, topic, %{})
+    end
+
+    test "rejects private channel when no auth endpoint configured", %{
+      socket: socket,
+      application: app
+    } do
+      topic = "channels:app:#{app.id}:private-room"
+
+      assert {:error, %{reason: "auth_endpoint_not_configured"}} =
+               subscribe_and_join(socket, topic, %{})
+    end
+
+    test "rejects private channel when auth endpoint is down", %{
+      application: app,
+      api_key: api_key
+    } do
+      bypass = Bypass.open()
+
+      app
+      |> Ecto.Changeset.change(channels_auth_endpoint: "http://localhost:#{bypass.port}/auth")
+      |> Ricqchet.Repo.update!()
+
+      socket = reconnect_socket(api_key)
+      Bypass.down(bypass)
+
+      topic = "channels:app:#{app.id}:private-room"
+      assert {:error, %{reason: "auth_unavailable"}} = subscribe_and_join(socket, topic, %{})
+    end
+
+    test "uses namespace auth endpoint over app-level", %{
+      application: app,
+      tenant: tenant,
+      api_key: api_key
+    } do
+      ns_bypass = Bypass.open()
+
+      Namespaces.create_namespace(
+        %{
+          pattern: "private-vip-*",
+          priority: 10,
+          auth_endpoint: "http://localhost:#{ns_bypass.port}/ns-auth"
+        },
+        app.id,
+        tenant.id
+      )
+
+      socket = reconnect_socket(api_key)
+
+      Bypass.expect_once(ns_bypass, "POST", "/ns-auth", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{ok: true}))
+      end)
+
+      topic = "channels:app:#{app.id}:private-vip-room"
+      assert {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+    end
+  end
+
+  describe "join/3 - presence channels" do
+    test "joins presence channel with auth endpoint approval", %{
+      application: app,
+      api_key: api_key
+    } do
+      bypass = Bypass.open()
+
+      app
+      |> Ecto.Changeset.change(channels_auth_endpoint: "http://localhost:#{bypass.port}/auth")
+      |> Ricqchet.Repo.update!()
+
+      socket = reconnect_socket(api_key)
+
+      Bypass.expect_once(bypass, "POST", "/auth", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{ok: true}))
+      end)
+
+      topic = "channels:app:#{app.id}:presence-lobby"
+      assert {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+    end
+
+    test "rejects presence channel when auth fails", %{
+      application: app,
+      api_key: api_key
+    } do
+      bypass = Bypass.open()
+
+      app
+      |> Ecto.Changeset.change(channels_auth_endpoint: "http://localhost:#{bypass.port}/auth")
+      |> Ricqchet.Repo.update!()
+
+      socket = reconnect_socket(api_key)
+
+      Bypass.expect_once(bypass, "POST", "/auth", fn conn ->
+        Plug.Conn.resp(conn, 403, "Forbidden")
+      end)
+
+      topic = "channels:app:#{app.id}:presence-lobby"
+      assert {:error, %{reason: "forbidden"}} = subscribe_and_join(socket, topic, %{})
     end
   end
 

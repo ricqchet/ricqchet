@@ -76,12 +76,12 @@ defmodule Ricqchet.Channels.NamespacesTest do
     end
 
     test "validates numeric fields", %{application: app, tenant: tenant} do
-      attrs = %{pattern: "test", history_ttl_seconds: 0}
-      assert {:error, changeset} = Namespaces.create_namespace(attrs, app.id, tenant.id)
+      ttl_attrs = %{pattern: "test", history_ttl_seconds: 0}
+      assert {:error, changeset} = Namespaces.create_namespace(ttl_attrs, app.id, tenant.id)
       assert errors_on(changeset).history_ttl_seconds
 
-      attrs = %{pattern: "test", max_members: -1}
-      assert {:error, changeset} = Namespaces.create_namespace(attrs, app.id, tenant.id)
+      members_attrs = %{pattern: "test", max_members: -1}
+      assert {:error, changeset} = Namespaces.create_namespace(members_attrs, app.id, tenant.id)
       assert errors_on(changeset).max_members
     end
 

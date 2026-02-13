@@ -19,16 +19,10 @@ defmodule Ricqchet.Channels do
   """
   @spec validate_channel_name(String.t()) :: :ok | {:error, String.t()}
   def validate_channel_name(name) when is_binary(name) do
-    cond do
-      not Regex.match?(@channel_name_regex, name) ->
-        {:error,
-         "invalid channel name: must be 1-164 alphanumeric, dash, or underscore characters"}
-
-      String.starts_with?(name, "private-") or String.starts_with?(name, "presence-") ->
-        {:error, "private and presence channels are not yet supported"}
-
-      true ->
-        :ok
+    if Regex.match?(@channel_name_regex, name) do
+      :ok
+    else
+      {:error, "invalid channel name: must be 1-164 alphanumeric, dash, or underscore characters"}
     end
   end
 
