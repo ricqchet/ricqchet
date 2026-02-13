@@ -82,7 +82,12 @@ defmodule Ricqchet.Channels do
   defp format_members(presence_map) do
     Enum.map(presence_map, fn {user_id, %{metas: metas}} ->
       meta = List.first(metas, %{})
-      %{user_id: user_id, user_info: Map.get(meta, :user_info, %{})}
+
+      %{
+        user_id: user_id,
+        user_info: Map.get(meta, :user_info, %{}),
+        joined_at: Map.get(meta, :joined_at)
+      }
     end)
   end
 

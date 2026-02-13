@@ -96,7 +96,7 @@ defmodule Ricqchet.Channels.Namespaces do
 
   def pattern_matches?(pattern, channel_name) do
     if String.ends_with?(pattern, "*") do
-      prefix = String.slice(pattern, 0..(String.length(pattern) - 2)//1)
+      prefix = String.slice(pattern, 0..(String.length(pattern) - 2))
       String.starts_with?(channel_name, prefix)
     else
       pattern == channel_name

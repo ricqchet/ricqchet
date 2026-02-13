@@ -9,6 +9,7 @@ defmodule Ricqchet.Channels.Auth do
   require Logger
 
   alias Ricqchet.Channels.NamespaceConfig
+  alias Ricqchet.UrlValidator
 
   @doc """
   Authorizes a user to join a private or presence channel.
@@ -50,6 +51,22 @@ defmodule Ricqchet.Channels.Auth do
   end
 
   defp call_auth_endpoint(endpoint, channel_name, user_id, socket_id) do
+    case UrlValidator.validate_url(endpoint) do
+      :ok ->
+        do_auth_request(endpoint, channel_name, user_id, socket_id)
+
+      {:error, reason} ->
+        Logger.warning("Auth endpoint URL blocked by SSRF protection",
+          reason: reason,
+          endpoint: endpoint,
+          channel: channel_name
+        )
+
+        {:error, :auth_unavailable}
+    end
+  end
+
+  defp do_auth_request(endpoint, channel_name, user_id, socket_id) do
     body = %{
       channel: channel_name,
       user_id: user_id,
