@@ -7,27 +7,32 @@ defmodule RicqchetWeb.ChannelController do
   """
 
   use RicqchetWeb, :controller
+  use OpenApiSpex.ControllerSpecs
 
+  alias OpenApiSpex.Schema
   alias Ricqchet.Channels
+  alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
+
+  tags(["channels"])
 
   @max_channels 10
   @max_batch_size 10
 
-  @doc """
-  Publishes an event to one or more channels.
+  operation(:create,
+    summary: "Trigger an event",
+    description: "Publishes an event to one or more channels.",
+    request_body: {"Event payload", "application/json", Schemas.Channels.TriggerEventRequest},
+    responses:
+      Schemas.Helpers.create_responses(
+        Schemas.Channels.TriggerEventResponse,
+        202,
+        [401, 403, 422, 429]
+      ),
+    security: [%{"bearer_auth" => []}]
+  )
 
-  ## Single channel
-
-      POST /v1/channels/events
-      {"channel": "chat-room1", "event": "new-message", "data": {"text": "Hello!"}}
-
-  ## Multiple channels
-
-      POST /v1/channels/events
-      {"channels": ["chat-room1", "chat-room2"], "event": "announcement", "data": {"text": "Hi"}}
-  """
   def create(conn, params) do
     application = conn.assigns.current_application
 
@@ -45,15 +50,20 @@ defmodule RicqchetWeb.ChannelController do
     end
   end
 
-  @doc """
-  Publishes a batch of events in a single API call.
+  operation(:batch_create,
+    summary: "Trigger batch events",
+    description:
+      "Publishes multiple events in a single API call. Each event is published independently; partial success is possible.",
+    request_body: {"Batch payload", "application/json", Schemas.Channels.BatchTriggerRequest},
+    responses:
+      Schemas.Helpers.create_responses(
+        Schemas.Channels.BatchTriggerResponse,
+        202,
+        [401, 403, 422, 429]
+      ),
+    security: [%{"bearer_auth" => []}]
+  )
 
-  Each event is published independently with its own result.
-  Partial success is possible.
-
-      POST /v1/channels/events/batch
-      {"batch": [{"channel": "chat-1", "event": "msg", "data": {"text": "hi"}}]}
-  """
   def batch_create(conn, %{"batch" => events}) when is_list(events) do
     application = conn.assigns.current_application
 
@@ -78,11 +88,13 @@ defmodule RicqchetWeb.ChannelController do
     end
   end
 
-  @doc """
-  Lists active channels for the current application.
+  operation(:index,
+    summary: "List channels",
+    description: "Lists all active channels for the current application.",
+    responses: Schemas.Helpers.list_responses(Schemas.Channels.ChannelList, [401, 403, 429]),
+    security: [%{"bearer_auth" => []}]
+  )
 
-      GET /v1/channels
-  """
   def index(conn, _params) do
     application = conn.assigns.current_application
 
@@ -92,11 +104,22 @@ defmodule RicqchetWeb.ChannelController do
     end
   end
 
-  @doc """
-  Gets info for a specific channel.
+  operation(:show,
+    summary: "Get channel info",
+    description:
+      "Returns details for a specific channel including subscriber count and type. For presence channels, includes the list of connected members.",
+    parameters: [
+      channel_name: [
+        in: :path,
+        schema: %Schema{type: :string},
+        required: true,
+        description: "Channel name"
+      ]
+    ],
+    responses: Schemas.Helpers.show_responses(Schemas.Channels.ChannelInfo, [401, 403, 429]),
+    security: [%{"bearer_auth" => []}]
+  )
 
-      GET /v1/channels/:channel_name
-  """
   def show(conn, %{"channel_name" => channel_name}) do
     application = conn.assigns.current_application
 

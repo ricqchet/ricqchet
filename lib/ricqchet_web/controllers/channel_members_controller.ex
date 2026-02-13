@@ -6,20 +6,37 @@ defmodule RicqchetWeb.ChannelMembersController do
   """
 
   use RicqchetWeb, :controller
+  use OpenApiSpex.ControllerSpecs
 
+  alias OpenApiSpex.Schema
   alias Ricqchet.Channels
   alias RicqchetWeb.Channels.Presence
+  alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
 
-  @doc """
-  Lists members of a presence channel.
+  tags(["channels"])
 
-      GET /v1/channels/:channel_name/members
+  operation(:index,
+    summary: "List channel members",
+    description:
+      "Returns the list of connected users for a presence channel. Only available for channels with the `presence-` prefix.",
+    parameters: [
+      channel_name: [
+        in: :path,
+        schema: %Schema{type: :string},
+        required: true,
+        description: "Presence channel name (must start with `presence-`)"
+      ]
+    ],
+    responses:
+      Schemas.Helpers.list_responses(
+        Schemas.Channels.MemberList,
+        [401, 403, 422, 429]
+      ),
+    security: [%{"bearer_auth" => []}]
+  )
 
-  Returns the list of connected users for a `presence-` prefixed channel.
-  Returns an error for non-presence channels.
-  """
   def index(conn, %{"channel_name" => channel_name}) do
     application = conn.assigns.current_application
 

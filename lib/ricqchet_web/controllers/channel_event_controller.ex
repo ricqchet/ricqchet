@@ -7,30 +7,49 @@ defmodule RicqchetWeb.ChannelEventController do
   """
 
   use RicqchetWeb, :controller
+  use OpenApiSpex.ControllerSpecs
 
+  alias OpenApiSpex.Schema
   alias Ricqchet.Channels
   alias Ricqchet.Channels.History
+  alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
 
-  @doc """
-  Lists events for a channel.
+  tags(["channels"])
 
-  ## Query modes
+  operation(:index,
+    summary: "List channel events",
+    description:
+      "Returns persisted event history for a channel. Use `since_id` to fetch events after a specific event, or omit it to get the most recent events.",
+    parameters: [
+      channel_name: [
+        in: :path,
+        schema: %Schema{type: :string},
+        required: true,
+        description: "Channel name"
+      ],
+      since_id: [
+        in: :query,
+        schema: %Schema{type: :string, format: :uuid},
+        required: false,
+        description: "Event ID to fetch events after"
+      ],
+      limit: [
+        in: :query,
+        schema: %Schema{type: :integer, minimum: 1, maximum: 100, default: 100},
+        required: false,
+        description: "Maximum number of events to return"
+      ]
+    ],
+    responses:
+      Schemas.Helpers.list_responses(
+        Schemas.Channels.ChannelEventHistory,
+        [401, 403, 422, 429]
+      ),
+    security: [%{"bearer_auth" => []}]
+  )
 
-  With `since_id`: returns events after the given event ID.
-
-      GET /v1/channels/:channel_name/events?since_id=<event_id>
-
-  Without `since_id`: returns the most recent events.
-
-      GET /v1/channels/:channel_name/events?limit=50
-
-  ## Parameters
-
-  - `since_id` - Event ID to fetch events after (optional)
-  - `limit` - Maximum number of events to return (default: 100, max: 100)
-  """
   def index(conn, %{"channel_name" => channel_name} = params) do
     application = conn.assigns.current_application
 

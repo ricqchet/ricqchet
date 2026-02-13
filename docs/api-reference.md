@@ -158,6 +158,104 @@ curl -X DELETE "http://localhost:4000/v1/messages/550e8400-..." \
 {"error": "already_dispatched", "message": "Message already dispatched"}
 ```
 
+### Channels
+
+Real-time event broadcasting via WebSocket channels. See [Channels](channels.md) for the full guide.
+
+#### Trigger Event
+
+```
+POST /v1/channels/events
+```
+
+Publishes an event to one or more channels.
+
+**Request body:**
+
+```json
+{
+  "channel": "chat-room",
+  "event": "new-message",
+  "data": {"text": "Hello!"},
+  "socket_id": "123.456"
+}
+```
+
+For multiple channels, use `channels` instead of `channel`:
+
+```json
+{
+  "channels": ["room-1", "room-2"],
+  "event": "announcement",
+  "data": {"text": "Hi everyone"}
+}
+```
+
+**Response (202 Accepted):**
+
+```json
+{"event_ids": ["550e8400-..."], "channel": "chat-room"}
+```
+
+#### Batch Trigger Events
+
+```
+POST /v1/channels/events/batch
+```
+
+Publishes multiple events in a single call. Partial success is possible.
+
+**Response (202 Accepted):**
+
+```json
+{
+  "results": [
+    {"channel": "chat", "event": "msg", "event_id": "...", "status": "ok"},
+    {"channel": "bad!", "event": "msg", "error": "invalid channel name", "status": "error"}
+  ]
+}
+```
+
+#### List Active Channels
+
+```
+GET /v1/channels
+```
+
+Returns all channels with active subscribers.
+
+#### Get Channel Info
+
+```
+GET /v1/channels/:channel_name
+```
+
+Returns subscriber count, type, and members (for presence channels).
+
+#### List Channel Events
+
+```
+GET /v1/channels/:channel_name/events?since_id=<id>&limit=50
+```
+
+Returns persisted event history for channels with history enabled.
+
+#### List Channel Members
+
+```
+GET /v1/channels/:channel_name/members
+```
+
+Returns connected users for presence channels.
+
+#### Disconnect User
+
+```
+DELETE /v1/channels/users/:user_id/connections
+```
+
+Disconnects all WebSocket connections for a user.
+
 ### Application Management
 
 For managing applications within a tenant, see [Applications](applications.md).

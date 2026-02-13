@@ -102,6 +102,16 @@ Group multiple messages into a single HTTP delivery. Instead of 100 separate web
 - Aggregating events before processing
 - Cost optimization when destination charges per request
 
+### Channels (Real-Time)
+
+Broadcast events to connected WebSocket clients in real time. Channels support three types:
+
+- **Public channels**: Open to any connected client
+- **Private channels** (`private-` prefix): Require authorization via your auth endpoint
+- **Presence channels** (`presence-` prefix): Private channels with member tracking
+
+Features include event history with configurable retention, cache channels (last event on join), client-to-client events, lifecycle webhooks, and namespace-based configuration.
+
 ## What Ricqchet Adds to Your Requests
 
 When delivering a message, Ricqchet includes these headers:
@@ -126,4 +136,5 @@ Your forwarded headers are included alongside these.
 - [API Reference](api-reference.md) - Full endpoint documentation
 - [Delivery](delivery.md) - Retry behavior and timeout details
 - [Batching](batching.md) - Grouping messages for bulk delivery
+- [Channels](channels.md) - Real-time WebSocket channels
 - [Receiving Webhooks](receiving-webhooks.md) - Guide for destination endpoints

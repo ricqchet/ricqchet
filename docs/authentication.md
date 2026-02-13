@@ -340,6 +340,26 @@ ApiKeys.revoke_api_key(api_key)
 your_secret_storage.store("api_key", new_api_key.api_key)
 ```
 
+## WebSocket Authentication (Channels)
+
+Channel WebSocket connections authenticate using API keys passed as socket params during the handshake:
+
+```
+wss://api.ricqchet.com/channels?api_key=<key>&user_id=<uid>&user_info=<json>
+```
+
+**Parameters:**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `api_key` | Yes | API key for the application |
+| `user_id` | No | Unique identifier for the connecting user (default: "anonymous") |
+| `user_info` | No | JSON-encoded metadata about the user |
+
+Connections are rejected if the API key is invalid, the application doesn't have `channels_enabled`, or the connection limit has been reached.
+
+For private and presence channels, an additional authorization step calls your configured auth endpoint to verify the user has access.
+
 ## Key Expiration
 
 API keys can have an optional expiration date. Expired keys are automatically rejected during authentication.
