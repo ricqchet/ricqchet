@@ -206,4 +206,116 @@ defmodule RicqchetWeb.ChannelControllerTest do
       assert response["occupied"] == false
     end
   end
+
+  describe "POST /v1/channels/events/batch" do
+    test "publishes batch of events to different channels", %{conn: conn} do
+      conn =
+        post(conn, "/v1/channels/events/batch", %{
+          "batch" => [
+            %{"channel" => "chat-1", "event" => "msg", "data" => %{"text" => "hi"}},
+            %{"channel" => "chat-2", "event" => "msg", "data" => %{"text" => "hello"}}
+          ]
+        })
+
+      response = json_response(conn, 202)
+      results = response["results"]
+      assert length(results) == 2
+      assert Enum.all?(results, &(&1["status"] == "ok"))
+      assert Enum.all?(results, &is_binary(&1["event_id"]))
+      assert Enum.map(results, & &1["channel"]) == ["chat-1", "chat-2"]
+    end
+
+    test "supports socket_id per event", %{conn: conn, application: app} do
+      topic = "channels:app:#{app.id}:batch-room"
+      Phoenix.PubSub.subscribe(Ricqchet.PubSub, topic)
+
+      post(conn, "/v1/channels/events/batch", %{
+        "batch" => [
+          %{
+            "channel" => "batch-room",
+            "event" => "test",
+            "data" => %{},
+            "socket_id" => "sender_456"
+          }
+        ]
+      })
+
+      assert_receive {:channel_event, payload}
+      assert payload.socket_id == "sender_456"
+    end
+
+    test "returns error for empty batch", %{conn: conn} do
+      conn =
+        post(conn, "/v1/channels/events/batch", %{
+          "batch" => []
+        })
+
+      assert json_response(conn, 422)
+    end
+
+    test "returns error when batch exceeds max size", %{conn: conn} do
+      events =
+        Enum.map(1..11, fn i ->
+          %{"channel" => "room-#{i}", "event" => "msg", "data" => %{}}
+        end)
+
+      conn = post(conn, "/v1/channels/events/batch", %{"batch" => events})
+      assert json_response(conn, 422)
+    end
+
+    test "returns error when batch param is missing", %{conn: conn} do
+      conn = post(conn, "/v1/channels/events/batch", %{"events" => []})
+      assert json_response(conn, 422)
+    end
+
+    test "handles partial failure with invalid channel", %{conn: conn} do
+      conn =
+        post(conn, "/v1/channels/events/batch", %{
+          "batch" => [
+            %{"channel" => "valid-channel", "event" => "msg", "data" => %{}},
+            %{"channel" => "invalid name!", "event" => "msg", "data" => %{}}
+          ]
+        })
+
+      response = json_response(conn, 202)
+      results = response["results"]
+      assert length(results) == 2
+
+      [ok_result, error_result] = results
+      assert ok_result["status"] == "ok"
+      assert ok_result["event_id"] != nil
+      assert error_result["status"] == "error"
+      assert error_result["error"] != nil
+    end
+
+    test "handles missing required fields per event", %{conn: conn} do
+      conn =
+        post(conn, "/v1/channels/events/batch", %{
+          "batch" => [
+            %{"channel" => "room", "data" => %{}},
+            %{"event" => "msg", "data" => %{}}
+          ]
+        })
+
+      response = json_response(conn, 202)
+      results = response["results"]
+      assert length(results) == 2
+      assert Enum.all?(results, &(&1["status"] == "error"))
+    end
+
+    test "returns 403 when channels not enabled", %{conn: conn, application: app} do
+      app
+      |> Ecto.Changeset.change(channels_enabled: false)
+      |> Ricqchet.Repo.update!()
+
+      conn =
+        post(conn, "/v1/channels/events/batch", %{
+          "batch" => [
+            %{"channel" => "room", "event" => "test", "data" => %{}}
+          ]
+        })
+
+      assert json_response(conn, 403)
+    end
+  end
 end

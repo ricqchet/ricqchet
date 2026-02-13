@@ -11,6 +11,10 @@ defmodule RicqchetWeb.ChannelJSON do
     %{event_ids: event_ids, channels: channels}
   end
 
+  def render("batch_created.json", %{results: results}) do
+    %{results: results}
+  end
+
   def render("index.json", %{channels: channels}) do
     %{channels: Enum.map(channels, &channel_summary/1)}
   end

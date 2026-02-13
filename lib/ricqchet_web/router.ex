@@ -129,6 +129,7 @@ defmodule RicqchetWeb.Router do
 
     # Channel endpoints
     post "/channels/events", ChannelController, :create
+    post "/channels/events/batch", ChannelController, :batch_create
     get "/channels", ChannelController, :index
     get "/channels/:channel_name", ChannelController, :show
     get "/channels/:channel_name/events", ChannelEventController, :index
