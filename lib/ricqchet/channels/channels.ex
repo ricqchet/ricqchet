@@ -8,6 +8,7 @@ defmodule Ricqchet.Channels do
 
   alias Ricqchet.Channels.EventPublisher
   alias Ricqchet.Channels.SubscriberTracker
+  alias RicqchetWeb.Channels.Presence
 
   @channel_name_regex ~r/\A[a-zA-Z0-9_-]{1,164}\z/
 
@@ -62,12 +63,27 @@ defmodule Ricqchet.Channels do
   def get_channel_info(application_id, channel_name) do
     count = SubscriberTracker.get_count(application_id, channel_name)
 
-    %{
+    info = %{
       name: channel_name,
       subscriber_count: count,
       type: channel_type(channel_name),
       occupied: count > 0
     }
+
+    if channel_type(channel_name) == "presence" do
+      topic = "channels:app:#{application_id}:#{channel_name}"
+      members = Presence.list(topic)
+      Map.put(info, :members, format_members(members))
+    else
+      info
+    end
+  end
+
+  defp format_members(presence_map) do
+    Enum.map(presence_map, fn {user_id, %{metas: metas}} ->
+      meta = List.first(metas, %{})
+      %{user_id: user_id, user_info: Map.get(meta, :user_info, %{})}
+    end)
   end
 
   defp channel_type("private-" <> _), do: "private"
