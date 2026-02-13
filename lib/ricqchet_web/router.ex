@@ -131,6 +131,7 @@ defmodule RicqchetWeb.Router do
     post "/channels/events", ChannelController, :create
     get "/channels", ChannelController, :index
     get "/channels/:channel_name", ChannelController, :show
+    get "/channels/:channel_name/events", ChannelEventController, :index
   end
 
   # Enable LiveDashboard in development with basic auth protection
