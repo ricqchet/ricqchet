@@ -35,12 +35,9 @@ defmodule RicqchetWeb.ChannelNamespaceController do
 
     with :ok <- authorize_admin(user),
          {:ok, application} <- get_application_or_error(tenant, app_id),
+         namespace_params = Map.drop(params, ["application_id"]),
          {:ok, namespace} <-
-           Namespaces.create_namespace(
-             Map.drop(params, ["application_id"]),
-             application.id,
-             tenant.id
-           ) do
+           Namespaces.create_namespace(namespace_params, application.id, tenant.id) do
       NamespaceConfig.invalidate_cache(application.id)
 
       conn

@@ -78,16 +78,16 @@ defmodule Ricqchet.Channels.AuthTest do
     end
 
     test "returns no_auth_endpoint when none configured", %{tenant: tenant} do
-      {:ok, app_no_auth} =
+      {:ok, created_app} =
         Ricqchet.Applications.create_application(tenant, %{name: "No Auth App"})
 
-      app_no_auth =
-        app_no_auth
+      app_without_endpoint =
+        created_app
         |> Ecto.Changeset.change(channels_enabled: true)
         |> Ricqchet.Repo.update!()
 
       assert {:error, :no_auth_endpoint} =
-               Auth.authorize(app_no_auth, "private-room", "user_123", "socket_abc")
+               Auth.authorize(app_without_endpoint, "private-room", "user_123", "socket_abc")
     end
 
     test "uses namespace auth_endpoint when available", %{

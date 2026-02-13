@@ -38,6 +38,7 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
 
         socket =
           socket
+          |> assign(:application, application)
           |> assign(:application_id, application.id)
           |> assign(:tenant_id, tenant.id)
           |> assign(:user_id, user_id)
