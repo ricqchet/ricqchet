@@ -75,6 +75,37 @@ defmodule RicqchetWeb.Telemetry do
           "The time the connection spent waiting before being checked out for the query"
       ),
 
+      # Channel Metrics
+      counter("ricqchet.channels.event.published.data_size",
+        tags: [:application_id],
+        description: "Count of channel events published"
+      ),
+      summary("ricqchet.channels.event.published.data_size",
+        tags: [:application_id],
+        unit: {:byte, :kilobyte},
+        description: "Size of channel event data"
+      ),
+      counter("ricqchet.channels.connection.opened.count",
+        tags: [:application_id],
+        description: "Channel WebSocket connections opened"
+      ),
+      counter("ricqchet.channels.connection.closed.count",
+        tags: [:application_id],
+        description: "Channel WebSocket connections closed"
+      ),
+      counter("ricqchet.channels.join.count",
+        tags: [:application_id, :channel_type],
+        description: "Channel joins"
+      ),
+      counter("ricqchet.channels.presence.track.count",
+        tags: [:application_id],
+        description: "Presence trackings"
+      ),
+      counter("ricqchet.channels.recovery.events_count",
+        tags: [:application_id, :status],
+        description: "Event recovery attempts"
+      ),
+
       # VM Metrics
       summary("vm.memory.total", unit: {:byte, :kilobyte}),
       summary("vm.total_run_queue_lengths.total"),

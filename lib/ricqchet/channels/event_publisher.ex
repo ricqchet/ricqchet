@@ -34,14 +34,42 @@ defmodule Ricqchet.Channels.EventPublisher do
   - `:user_id` - User ID for event persistence
   """
   @spec publish(String.t(), String.t(), String.t(), term(), keyword()) ::
-          {:ok, %{id: String.t()}}
+          {:ok, %{id: String.t()}} | {:error, :event_too_large}
   def publish(application_id, channel, event_name, data, opts \\ []) do
     socket_id = Keyword.get(opts, :socket_id)
     tenant_id = Keyword.get(opts, :tenant_id)
     user_id = Keyword.get(opts, :user_id)
 
+    encoded_data = Jason.encode!(data)
+
+    case check_event_size(application_id, channel, encoded_data) do
+      :ok ->
+        do_publish(application_id, channel, event_name, data, encoded_data,
+          socket_id: socket_id,
+          tenant_id: tenant_id,
+          user_id: user_id
+        )
+
+      {:error, :event_too_large} = error ->
+        error
+    end
+  end
+
+  defp do_publish(application_id, channel, event_name, data, encoded_data, opts) do
+    socket_id = Keyword.get(opts, :socket_id)
+    tenant_id = Keyword.get(opts, :tenant_id)
+    user_id = Keyword.get(opts, :user_id)
+
     {event_id, sequence} =
-      case maybe_persist(application_id, tenant_id, channel, event_name, data, socket_id, user_id) do
+      case maybe_persist(
+             application_id,
+             tenant_id,
+             channel,
+             event_name,
+             encoded_data,
+             socket_id,
+             user_id
+           ) do
         {:ok, id, seq} -> {id, seq}
         :skip -> {Ecto.UUID.generate(), nil}
       end
@@ -58,7 +86,23 @@ defmodule Ricqchet.Channels.EventPublisher do
     topic = "channels:app:#{application_id}:#{channel}"
     PubSub.broadcast(@pubsub, topic, {:channel_event, payload})
 
+    :telemetry.execute(
+      [:ricqchet, :channels, :event, :published],
+      %{data_size: byte_size(encoded_data)},
+      %{application_id: application_id, channel: channel, event: event_name}
+    )
+
     {:ok, %{id: event_id}}
+  end
+
+  defp check_event_size(application_id, channel, encoded_data) do
+    case NamespaceConfig.get_namespace_for_channel(application_id, channel) do
+      {:ok, %{max_event_size_bytes: max}} when is_integer(max) ->
+        if byte_size(encoded_data) > max, do: {:error, :event_too_large}, else: :ok
+
+      _ ->
+        :ok
+    end
   end
 
   defp maybe_persist(application_id, tenant_id, channel, event_name, data, socket_id, user_id) do
@@ -85,13 +129,11 @@ defmodule Ricqchet.Channels.EventPublisher do
          tenant_id,
          channel,
          event_name,
-         data,
+         encoded_data,
          socket_id,
          user_id,
          namespace
        ) do
-    encoded_data = Jason.encode!(data)
-
     attrs = %{
       channel: channel,
       event_name: event_name,

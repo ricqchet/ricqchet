@@ -112,13 +112,21 @@ defmodule RicqchetWeb.ChannelController do
 
     opts = Keyword.merge(extra_opts, if(socket_id, do: [socket_id: socket_id], else: []))
 
-    event_ids =
-      Enum.map(channels, fn channel ->
-        {:ok, result} = Channels.publish_event(application_id, channel, event, data, opts)
-        result.id
+    result =
+      Enum.reduce_while(channels, {:ok, []}, fn channel, {:ok, ids} ->
+        case Channels.publish_event(application_id, channel, event, data, opts) do
+          {:ok, publish_result} ->
+            {:cont, {:ok, [publish_result.id | ids]}}
+
+          {:error, :event_too_large} ->
+            {:halt, {:error, :validation, "event data exceeds maximum allowed size"}}
+        end
       end)
 
-    {:ok, event_ids}
+    case result do
+      {:ok, ids} -> {:ok, Enum.reverse(ids)}
+      error -> error
+    end
   end
 
   defp check_channels_enabled(application) do
@@ -204,8 +212,19 @@ defmodule RicqchetWeb.ChannelController do
   defp do_publish_batch_event(application, channel, event, params) do
     data = Map.get(params, "data", %{})
     opts = build_publish_opts(application.tenant_id, params)
-    {:ok, result} = Channels.publish_event(application.id, channel, event, data, opts)
-    %{channel: channel, event: event, event_id: result.id, status: "ok"}
+
+    case Channels.publish_event(application.id, channel, event, data, opts) do
+      {:ok, result} ->
+        %{channel: channel, event: event, event_id: result.id, status: "ok"}
+
+      {:error, :event_too_large} ->
+        %{
+          channel: channel,
+          event: event,
+          error: "event data exceeds maximum allowed size",
+          status: "error"
+        }
+    end
   end
 
   defp build_publish_opts(tenant_id, params) do

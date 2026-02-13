@@ -76,12 +76,24 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
           })
         end)
 
+        :telemetry.execute(
+          [:ricqchet, :channels, :recovery],
+          %{events_count: length(events)},
+          %{application_id: app_id, status: :ok}
+        )
+
       {:error, :event_not_found} ->
         push(socket, "ricqchet:recovery_failed", %{
           reason: "event_not_found",
           last_event_id: last_event_id,
           channel: channel_name
         })
+
+        :telemetry.execute(
+          [:ricqchet, :channels, :recovery],
+          %{events_count: 0},
+          %{application_id: app_id, status: :failed}
+        )
     end
 
     {:noreply, socket}
@@ -114,6 +126,12 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
       })
 
     push(socket, "presence_state", Presence.list(socket))
+
+    :telemetry.execute(
+      [:ricqchet, :channels, :presence, :track],
+      %{count: 1},
+      %{application_id: socket.assigns.application_id}
+    )
 
     enqueue_webhook("member:added", socket.assigns.application_id, socket.assigns.channel_name,
       user_id: user_id,
@@ -158,6 +176,12 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   def terminate(_reason, socket) do
     case parse_topic_from_socket(socket) do
       {:ok, app_id, channel_name} ->
+        :telemetry.execute(
+          [:ricqchet, :channels, :connection, :closed],
+          %{count: 1},
+          %{application_id: app_id}
+        )
+
         if SubscriberTracker.track_leave(app_id, channel_name) == :last_subscriber do
           enqueue_webhook("channel:vacated", app_id, channel_name)
         end
@@ -238,6 +262,12 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     if channel_type(channel_name) == :presence do
       send(self(), :after_join_presence)
     end
+
+    :telemetry.execute(
+      [:ricqchet, :channels, :join],
+      %{count: 1},
+      %{application_id: app_id, channel_type: channel_type(channel_name)}
+    )
 
     socket = assign(socket, :channel_name, channel_name)
     {:ok, socket}

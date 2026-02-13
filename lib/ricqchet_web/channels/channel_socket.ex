@@ -44,6 +44,12 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
           |> assign(:user_id, user_id)
           |> assign(:user_info, user_info)
 
+        :telemetry.execute(
+          [:ricqchet, :channels, :connection, :opened],
+          %{count: 1},
+          %{application_id: application.id}
+        )
+
         {:ok, socket}
 
       {:error, reason} ->
