@@ -23,6 +23,7 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
 
   alias Ricqchet.Channels
   alias Ricqchet.Channels.Auth
+  alias Ricqchet.Channels.History
   alias Ricqchet.Channels.SubscriberTracker
   alias RicqchetWeb.Channels.ChannelSocket
 
@@ -58,6 +59,28 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     end
   end
 
+  def handle_info({:recover_events, app_id, channel_name, last_event_id}, socket) do
+    case History.get_events_since(app_id, channel_name, last_event_id) do
+      {:ok, events} ->
+        Enum.each(events, fn event ->
+          push(socket, event.event_name, %{
+            data: decode_event_data(event.data),
+            channel: event.channel,
+            sequence: event.sequence
+          })
+        end)
+
+      {:error, :event_not_found} ->
+        push(socket, "ricqchet:recovery_failed", %{
+          reason: "event_not_found",
+          last_event_id: last_event_id,
+          channel: channel_name
+        })
+    end
+
+    {:noreply, socket}
+  end
+
   @impl Phoenix.Channel
   def terminate(_reason, socket) do
     case parse_topic_from_socket(socket) do
@@ -71,12 +94,14 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     :ok
   end
 
-  defp authorize_and_join(app_id, channel_name, _params, socket) do
+  defp authorize_and_join(app_id, channel_name, params, socket) do
     with :ok <- verify_app_ownership(app_id, socket),
          :ok <- validate_name(channel_name) do
+      last_event_id = Map.get(params, "last_event_id")
+
       case channel_type(channel_name) do
-        :public -> do_join(app_id, channel_name, socket)
-        _authenticated -> join_with_auth(app_id, channel_name, socket)
+        :public -> do_join(app_id, channel_name, last_event_id, socket)
+        _authenticated -> join_with_auth(app_id, channel_name, last_event_id, socket)
       end
     end
   end
@@ -94,14 +119,14 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     end
   end
 
-  defp join_with_auth(app_id, channel_name, socket) do
+  defp join_with_auth(app_id, channel_name, last_event_id, socket) do
     application = socket.assigns.application
     user_id = socket.assigns.user_id
     socket_id = ChannelSocket.id(socket)
 
     case Auth.authorize(application, channel_name, user_id, socket_id) do
       {:ok, _auth_data} ->
-        do_join(app_id, channel_name, socket)
+        do_join(app_id, channel_name, last_event_id, socket)
 
       {:error, :forbidden} ->
         {:error, %{reason: "forbidden"}}
@@ -114,12 +139,28 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     end
   end
 
-  defp do_join(app_id, channel_name, socket) do
+  defp do_join(app_id, channel_name, last_event_id, socket) do
     topic = "channels:app:#{app_id}:#{channel_name}"
     Phoenix.PubSub.subscribe(Ricqchet.PubSub, topic)
     SubscriberTracker.track_join(app_id, channel_name)
+
+    if last_event_id do
+      send(self(), {:recover_events, app_id, channel_name, last_event_id})
+    end
+
     {:ok, socket}
   end
+
+  defp decode_event_data(nil), do: nil
+
+  defp decode_event_data(data) when is_binary(data) do
+    case Jason.decode(data) do
+      {:ok, decoded} -> decoded
+      _ -> data
+    end
+  end
+
+  defp decode_event_data(data), do: data
 
   defp channel_type("private-" <> _), do: :private
   defp channel_type("presence-" <> _), do: :presence

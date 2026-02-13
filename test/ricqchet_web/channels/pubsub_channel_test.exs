@@ -3,6 +3,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
 
   import Ricqchet.DataCase, only: [create_tenant_with_api_key: 0]
 
+  alias Ricqchet.Channels.ChannelEvent
   alias Ricqchet.Channels.NamespaceCache
   alias Ricqchet.Channels.Namespaces
   alias Ricqchet.Channels.SubscriberTracker
@@ -266,6 +267,83 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       Phoenix.PubSub.broadcast(Ricqchet.PubSub, topic, {:channel_event, payload})
 
       refute_push "my-event", _, 200
+    end
+  end
+
+  describe "missed-message recovery" do
+    defp insert_event(app_id, tenant_id, channel, event_name, data \\ %{}) do
+      %ChannelEvent{application_id: app_id, tenant_id: tenant_id}
+      |> ChannelEvent.changeset(%{
+        channel: channel,
+        event_name: event_name,
+        data: Jason.encode!(data),
+        data_size_bytes: byte_size(Jason.encode!(data))
+      })
+      |> Ricqchet.Repo.insert!()
+    end
+
+    test "recovers missed events on rejoin with last_event_id", %{
+      socket: socket,
+      application: app,
+      tenant: tenant
+    } do
+      e1 = insert_event(app.id, tenant.id, "recovery-room", "msg-1", %{text: "first"})
+      insert_event(app.id, tenant.id, "recovery-room", "msg-2", %{text: "second"})
+      insert_event(app.id, tenant.id, "recovery-room", "msg-3", %{text: "third"})
+
+      topic = "channels:app:#{app.id}:recovery-room"
+
+      {:ok, _reply, _socket} =
+        subscribe_and_join(socket, topic, %{"last_event_id" => e1.id})
+
+      assert_push "msg-2", %{data: %{"text" => "second"}, channel: "recovery-room"}
+      assert_push "msg-3", %{data: %{"text" => "third"}, channel: "recovery-room"}
+    end
+
+    test "pushes recovery_failed when last_event_id not found", %{
+      socket: socket,
+      application: app
+    } do
+      topic = "channels:app:#{app.id}:recovery-room"
+      fake_id = Ecto.UUID.generate()
+
+      {:ok, _reply, _socket} =
+        subscribe_and_join(socket, topic, %{"last_event_id" => fake_id})
+
+      assert_push "ricqchet:recovery_failed", %{
+        reason: "event_not_found",
+        last_event_id: ^fake_id
+      }
+    end
+
+    test "does not recover when no last_event_id provided", %{
+      socket: socket,
+      application: app,
+      tenant: tenant
+    } do
+      insert_event(app.id, tenant.id, "no-recover", "msg-1")
+
+      topic = "channels:app:#{app.id}:no-recover"
+      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+
+      refute_push "msg-1", _, 200
+    end
+
+    test "recovered events include sequence", %{
+      socket: socket,
+      application: app,
+      tenant: tenant
+    } do
+      e1 = insert_event(app.id, tenant.id, "seq-room", "msg-1")
+      insert_event(app.id, tenant.id, "seq-room", "msg-2")
+
+      topic = "channels:app:#{app.id}:seq-room"
+
+      {:ok, _reply, _socket} =
+        subscribe_and_join(socket, topic, %{"last_event_id" => e1.id})
+
+      assert_push "msg-2", %{sequence: seq}
+      assert is_integer(seq)
     end
   end
 
