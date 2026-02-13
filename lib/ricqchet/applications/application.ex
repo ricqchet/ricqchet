@@ -40,6 +40,9 @@ defmodule Ricqchet.Applications.Application do
     field :description, :string
     field :status, :string, default: "active"
     field :dlq_destination_url, :string
+    field :channels_enabled, :boolean, default: false
+    field :channels_auth_endpoint, :string
+    field :channels_webhook_url, :string
 
     belongs_to :tenant, Ricqchet.Tenants.Tenant
     has_many :api_keys, Ricqchet.ApiKeys.ApiKey
@@ -52,7 +55,15 @@ defmodule Ricqchet.Applications.Application do
   @doc false
   def changeset(application, attrs) do
     application
-    |> cast(attrs, [:name, :description, :status, :dlq_destination_url])
+    |> cast(attrs, [
+      :name,
+      :description,
+      :status,
+      :dlq_destination_url,
+      :channels_enabled,
+      :channels_auth_endpoint,
+      :channels_webhook_url
+    ])
     |> validate_required([:name])
     |> validate_length(:name, min: 1, max: 255)
     |> validate_length(:description, max: 255)

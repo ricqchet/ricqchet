@@ -19,6 +19,10 @@ defmodule RicqchetWeb.Endpoint do
     websocket: true,
     longpoll: false
 
+  socket "/channels", RicqchetWeb.Channels.ChannelSocket,
+    websocket: [connect_info: [:peer_data, :x_headers]],
+    longpoll: false
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # When code reloading is disabled (e.g., in production),
