@@ -92,4 +92,33 @@ defmodule Ricqchet.Channels.SubscriberTrackerTest do
       assert SubscriberTracker.list_active(app_id) == []
     end
   end
+
+  describe "get_cluster_count/2" do
+    test "returns local count on single node", %{app_id: app_id} do
+      assert SubscriberTracker.get_cluster_count(app_id, "cluster-test") == 0
+
+      SubscriberTracker.track_join(app_id, "cluster-test")
+      SubscriberTracker.track_join(app_id, "cluster-test")
+
+      assert SubscriberTracker.get_cluster_count(app_id, "cluster-test") == 2
+    end
+  end
+
+  describe "list_active_cluster/1" do
+    test "returns local channels on single node", %{app_id: app_id} do
+      SubscriberTracker.track_join(app_id, "cluster-a")
+      SubscriberTracker.track_join(app_id, "cluster-a")
+      SubscriberTracker.track_join(app_id, "cluster-b")
+
+      result = SubscriberTracker.list_active_cluster(app_id)
+      result_map = Map.new(result)
+
+      assert result_map["cluster-a"] == 2
+      assert result_map["cluster-b"] == 1
+    end
+
+    test "returns empty list for unknown application" do
+      assert SubscriberTracker.list_active_cluster(Ecto.UUID.generate()) == []
+    end
+  end
 end
