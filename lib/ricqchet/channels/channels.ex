@@ -34,6 +34,8 @@ defmodule Ricqchet.Channels do
   ## Options
 
   - `:socket_id` - Socket ID to exclude from broadcast (sender exclusion)
+  - `:tenant_id` - Tenant ID for event persistence
+  - `:user_id` - User ID for event persistence
   """
   def publish_event(application_id, channel, event_name, data, opts \\ []) do
     EventPublisher.publish(application_id, channel, event_name, data, opts)
