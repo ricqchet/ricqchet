@@ -12,6 +12,7 @@ defmodule Ricqchet.Delivery.Worker do
 
   require Logger
 
+  alias Ricqchet.Channels
   alias Ricqchet.Delivery.HttpClient
   alias Ricqchet.FlowControl
   alias Ricqchet.Messages
@@ -48,6 +49,7 @@ defmodule Ricqchet.Delivery.Worker do
     Logger.info("Message #{message.id} delivered successfully (status: #{status})")
 
     Messages.mark_delivered(message, response)
+    maybe_broadcast_to_channel(message)
   end
 
   defp handle_result(message, {:ok, response}) do
@@ -78,5 +80,50 @@ defmodule Ricqchet.Delivery.Worker do
     )
 
     Messages.mark_failed(message, reason, nil)
+  end
+
+  defp maybe_broadcast_to_channel(message) do
+    case get_channel_header(message.headers) do
+      nil ->
+        :ok
+
+      channel_name ->
+        broadcast_to_channel(message, channel_name)
+    end
+  end
+
+  defp broadcast_to_channel(message, channel_name) do
+    data = %{
+      message_id: message.id,
+      destination_url: message.destination_url,
+      payload: message.payload
+    }
+
+    Channels.publish_event(
+      message.application_id,
+      channel_name,
+      "relay:message",
+      data,
+      tenant_id: message.tenant_id
+    )
+
+    :ok
+  rescue
+    error ->
+      Logger.warning("Failed to broadcast message to channel",
+        message_id: message.id,
+        channel: channel_name,
+        reason: inspect(error)
+      )
+
+      :ok
+  end
+
+  defp get_channel_header(nil), do: nil
+
+  defp get_channel_header(headers) when is_map(headers) do
+    Enum.find_value(headers, fn {key, value} ->
+      if String.downcase(to_string(key)) == "ricqchet-channel", do: value
+    end)
   end
 end
