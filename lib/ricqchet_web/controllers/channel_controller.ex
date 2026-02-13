@@ -34,7 +34,10 @@ defmodule RicqchetWeb.ChannelController do
          {:ok, channels} <- extract_channels(params),
          {:ok, event} <- extract_event(params),
          :ok <- validate_all_channels(channels),
-         {:ok, event_ids} <- publish_to_channels(application.id, channels, event, params) do
+         {:ok, event_ids} <-
+           publish_to_channels(application.id, channels, event, params,
+             tenant_id: application.tenant_id
+           ) do
       conn
       |> put_status(:accepted)
       |> render(:created, event_ids: event_ids, channels: channels)
@@ -69,10 +72,11 @@ defmodule RicqchetWeb.ChannelController do
     end
   end
 
-  defp publish_to_channels(application_id, channels, event, params) do
+  defp publish_to_channels(application_id, channels, event, params, extra_opts) do
     data = Map.get(params, "data", %{})
     socket_id = Map.get(params, "socket_id")
-    opts = if socket_id, do: [socket_id: socket_id], else: []
+
+    opts = Keyword.merge(extra_opts, if(socket_id, do: [socket_id: socket_id], else: []))
 
     event_ids =
       Enum.map(channels, fn channel ->

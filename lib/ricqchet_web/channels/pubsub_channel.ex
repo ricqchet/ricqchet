@@ -46,7 +46,14 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     if payload[:socket_id] && payload[:socket_id] == ChannelSocket.id(socket) do
       {:noreply, socket}
     else
-      push(socket, payload.event, %{data: payload.data, channel: payload.channel})
+      event_data = %{data: payload.data, channel: payload.channel}
+
+      event_data =
+        if payload[:sequence],
+          do: Map.put(event_data, :sequence, payload.sequence),
+          else: event_data
+
+      push(socket, payload.event, event_data)
       {:noreply, socket}
     end
   end
