@@ -25,8 +25,14 @@ config :ricqchet, RicqchetWeb.Endpoint,
 # Configure Oban for job processing
 config :ricqchet, Oban,
   repo: Ricqchet.Repo,
-  plugins: [Oban.Plugins.Pruner],
-  queues: [default: 5, delivery: 50, dlq_notifications: 10]
+  plugins: [
+    Oban.Plugins.Pruner,
+    {Oban.Plugins.Cron,
+     crontab: [
+       {"*/15 * * * *", Ricqchet.Channels.CleanupWorker}
+     ]}
+  ],
+  queues: [default: 5, delivery: 50, dlq_notifications: 10, channel_webhooks: 5]
 
 # Flow control configuration
 config :ricqchet,
@@ -77,7 +83,9 @@ config :logger, :default_formatter,
     :channel,
     :endpoint,
     :status,
-    :reason
+    :reason,
+    :ttl_deleted,
+    :trimmed
   ]
 
 # Use Jason for JSON parsing in Phoenix
