@@ -95,6 +95,10 @@ defmodule RicqchetWeb.Router do
       only: [:index, :show, :create, :update, :delete] do
       # API key management (nested under applications for create/list)
       resources "/api-keys", ApiKeyController, only: [:index, :create]
+
+      # Channel namespace configuration
+      resources "/channel-namespaces", ChannelNamespaceController,
+        only: [:index, :create, :update, :delete]
     end
 
     # API key operations (revoke and rotate use direct key ID)
