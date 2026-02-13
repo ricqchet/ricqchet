@@ -18,6 +18,7 @@ defmodule Ricqchet.Application do
         Ricqchet.FlowControl.ReconciliationWorker,
         RicqchetWeb.Plugs.RateLimiter.ETSTable,
         Ricqchet.Channels.SubscriberTracker,
+        Ricqchet.Channels.ClientEventRateLimiter,
         Ricqchet.Channels.NamespaceCache,
         RicqchetWeb.Channels.Presence
       ]
