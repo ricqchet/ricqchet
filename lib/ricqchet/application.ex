@@ -19,6 +19,7 @@ defmodule Ricqchet.Application do
         RicqchetWeb.Plugs.RateLimiter.ETSTable,
         Ricqchet.Channels.SubscriberTracker,
         Ricqchet.Channels.ClientEventRateLimiter,
+        Ricqchet.Channels.ConnectionTracker,
         Ricqchet.Channels.NamespaceCache,
         RicqchetWeb.Channels.Presence
       ]

@@ -26,32 +26,16 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
   require Logger
 
   alias Ricqchet.ApiKeys
+  alias Ricqchet.Channels.ConnectionTracker
 
   channel "channels:*", RicqchetWeb.Channels.PubsubChannel
 
   @impl Phoenix.Socket
   def connect(%{"api_key" => api_key} = params, socket, _connect_info) do
-    case authenticate(api_key) do
-      {:ok, application, tenant} ->
-        user_id = Map.get(params, "user_id", "anonymous")
-        user_info = parse_user_info(Map.get(params, "user_info"))
-
-        socket =
-          socket
-          |> assign(:application, application)
-          |> assign(:application_id, application.id)
-          |> assign(:tenant_id, tenant.id)
-          |> assign(:user_id, user_id)
-          |> assign(:user_info, user_info)
-
-        :telemetry.execute(
-          [:ricqchet, :channels, :connection, :opened],
-          %{count: 1},
-          %{application_id: application.id}
-        )
-
-        {:ok, socket}
-
+    with {:ok, application, tenant} <- authenticate(api_key),
+         :ok <- check_connection_limit(application.id) do
+      {:ok, setup_socket(socket, application, tenant, params)}
+    else
       {:error, reason} ->
         Logger.debug("Channel socket auth failed: #{inspect(reason)}")
         :error
@@ -66,6 +50,31 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
   @impl Phoenix.Socket
   def id(socket) do
     "channel_socket:#{socket.assigns.application_id}:#{socket.assigns.user_id}"
+  end
+
+  defp check_connection_limit(application_id) do
+    case ConnectionTracker.track_connect(application_id, get_max_connections()) do
+      :ok -> :ok
+      :limit_reached -> {:error, :connection_limit_reached}
+    end
+  end
+
+  defp setup_socket(socket, application, tenant, params) do
+    user_id = Map.get(params, "user_id", "anonymous")
+    user_info = parse_user_info(Map.get(params, "user_info"))
+
+    :telemetry.execute(
+      [:ricqchet, :channels, :connection, :opened],
+      %{count: 1},
+      %{application_id: application.id}
+    )
+
+    socket
+    |> assign(:application, application)
+    |> assign(:application_id, application.id)
+    |> assign(:tenant_id, tenant.id)
+    |> assign(:user_id, user_id)
+    |> assign(:user_info, user_info)
   end
 
   defp authenticate(api_key) do
@@ -93,4 +102,11 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
   end
 
   defp parse_user_info(_), do: %{}
+
+  defp get_max_connections do
+    case Application.get_env(:ricqchet, :channels) do
+      nil -> nil
+      config -> Keyword.get(config, :max_connections_per_app)
+    end
+  end
 end

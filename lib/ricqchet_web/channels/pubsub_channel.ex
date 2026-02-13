@@ -24,6 +24,7 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   alias Ricqchet.Channels
   alias Ricqchet.Channels.Auth
   alias Ricqchet.Channels.ClientEventRateLimiter
+  alias Ricqchet.Channels.ConnectionTracker
   alias Ricqchet.Channels.History
   alias Ricqchet.Channels.NamespaceConfig
   alias Ricqchet.Channels.SubscriberTracker
@@ -176,6 +177,8 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   def terminate(_reason, socket) do
     case parse_topic_from_socket(socket) do
       {:ok, app_id, channel_name} ->
+        ConnectionTracker.track_disconnect(app_id)
+
         :telemetry.execute(
           [:ricqchet, :channels, :connection, :closed],
           %{count: 1},
