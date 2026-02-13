@@ -4,8 +4,34 @@ defmodule RicqchetWeb.ChannelUserController do
   """
 
   use RicqchetWeb, :controller
+  use OpenApiSpex.ControllerSpecs
+
+  alias OpenApiSpex.Schema
+  alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
+
+  tags(["channels"])
+
+  operation(:delete,
+    summary: "Disconnect a user",
+    description:
+      "Disconnects all WebSocket connections for a specific user from the application's channels.",
+    parameters: [
+      user_id: [
+        in: :path,
+        schema: %Schema{type: :string},
+        required: true,
+        description: "User ID to disconnect"
+      ]
+    ],
+    responses:
+      Schemas.Helpers.delete_responses(
+        Schemas.Channels.DisconnectResponse,
+        [401, 403, 429]
+      ),
+    security: [%{"bearer_auth" => []}]
+  )
 
   def delete(conn, %{"user_id" => user_id}) do
     application = conn.assigns.current_application

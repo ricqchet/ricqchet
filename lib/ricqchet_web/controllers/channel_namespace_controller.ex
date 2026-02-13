@@ -12,13 +12,37 @@ defmodule RicqchetWeb.ChannelNamespaceController do
   """
 
   use RicqchetWeb, :controller
+  use OpenApiSpex.ControllerSpecs
 
+  alias OpenApiSpex.Schema
   alias Ricqchet.Applications
   alias Ricqchet.Channels.NamespaceConfig
   alias Ricqchet.Channels.Namespaces
   alias Ricqchet.Users.User
+  alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
+
+  tags(["channel-namespaces"])
+
+  operation(:index,
+    summary: "List channel namespaces",
+    description: "Returns all channel namespace configurations for an application.",
+    parameters: [
+      application_id: [
+        in: :path,
+        schema: %Schema{type: :string, format: :uuid},
+        required: true,
+        description: "Application ID"
+      ]
+    ],
+    responses:
+      Schemas.Helpers.list_responses(
+        Schemas.Channels.NamespaceList,
+        [401, 404, 429]
+      ),
+    security: [%{"bearer_auth" => []}]
+  )
 
   def index(conn, %{"application_id" => app_id}) do
     tenant = conn.assigns.current_tenant
@@ -28,6 +52,28 @@ defmodule RicqchetWeb.ChannelNamespaceController do
       render(conn, :index, namespaces: namespaces)
     end
   end
+
+  operation(:create,
+    summary: "Create a channel namespace",
+    description: "Creates a new channel namespace configuration. Admin only.",
+    parameters: [
+      application_id: [
+        in: :path,
+        schema: %Schema{type: :string, format: :uuid},
+        required: true,
+        description: "Application ID"
+      ]
+    ],
+    request_body:
+      {"Namespace configuration", "application/json", Schemas.Channels.NamespaceParams},
+    responses:
+      Schemas.Helpers.create_responses(
+        Schemas.Channels.NamespaceResponse,
+        201,
+        [401, 403, 404, 422, 429]
+      ),
+    security: [%{"bearer_auth" => []}]
+  )
 
   def create(conn, %{"application_id" => app_id} = params) do
     user = conn.assigns.current_user
@@ -46,6 +92,33 @@ defmodule RicqchetWeb.ChannelNamespaceController do
     end
   end
 
+  operation(:update,
+    summary: "Update a channel namespace",
+    description: "Updates an existing channel namespace configuration. Admin only.",
+    parameters: [
+      application_id: [
+        in: :path,
+        schema: %Schema{type: :string, format: :uuid},
+        required: true,
+        description: "Application ID"
+      ],
+      id: [
+        in: :path,
+        schema: %Schema{type: :string, format: :uuid},
+        required: true,
+        description: "Namespace ID"
+      ]
+    ],
+    request_body:
+      {"Namespace configuration", "application/json", Schemas.Channels.NamespaceParams},
+    responses:
+      Schemas.Helpers.update_responses(
+        Schemas.Channels.NamespaceResponse,
+        [401, 403, 404, 422, 429]
+      ),
+    security: [%{"bearer_auth" => []}]
+  )
+
   def update(conn, %{"application_id" => app_id, "id" => id} = params) do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
@@ -59,6 +132,28 @@ defmodule RicqchetWeb.ChannelNamespaceController do
       render(conn, :show, namespace: updated)
     end
   end
+
+  operation(:delete,
+    summary: "Delete a channel namespace",
+    description: "Deletes a channel namespace configuration. Admin only.",
+    parameters: [
+      application_id: [
+        in: :path,
+        schema: %Schema{type: :string, format: :uuid},
+        required: true,
+        description: "Application ID"
+      ],
+      id: [
+        in: :path,
+        schema: %Schema{type: :string, format: :uuid},
+        required: true,
+        description: "Namespace ID"
+      ]
+    ],
+    responses:
+      Map.merge(%{204 => "No Content"}, Schemas.Helpers.error_responses([401, 403, 404, 429])),
+    security: [%{"bearer_auth" => []}]
+  )
 
   def delete(conn, %{"application_id" => app_id, "id" => id}) do
     user = conn.assigns.current_user
