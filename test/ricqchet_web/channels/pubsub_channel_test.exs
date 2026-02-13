@@ -455,6 +455,95 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
     end
   end
 
+  describe "client events" do
+    setup %{application: app, api_key: api_key} do
+      bypass = Bypass.open()
+
+      app
+      |> Ecto.Changeset.change(channels_auth_endpoint: "http://localhost:#{bypass.port}/auth")
+      |> Ricqchet.Repo.update!()
+
+      Bypass.stub(bypass, "POST", "/auth", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{ok: true}))
+      end)
+
+      socket = reconnect_socket(api_key)
+      %{socket: socket, bypass: bypass}
+    end
+
+    test "sends client event on private channel", %{socket: socket, application: app} do
+      topic = "channels:app:#{app.id}:private-client-room"
+      {:ok, _reply, socket} = subscribe_and_join(socket, topic, %{})
+
+      ref = push(socket, "client-typing", %{"user" => "alice"})
+      assert_reply ref, :ok
+    end
+
+    test "rejects client event on public channel", %{application: app, api_key: api_key} do
+      {:ok, _reply, pub_socket} =
+        api_key
+        |> reconnect_socket()
+        |> subscribe_and_join("channels:app:#{app.id}:public-room", %{})
+
+      ref = push(pub_socket, "client-typing", %{"user" => "alice"})
+      assert_reply ref, :error, %{reason: "client_events_not_allowed"}
+    end
+
+    test "rejects non-client-prefixed events", %{application: app, api_key: api_key} do
+      {:ok, _reply, joined_socket} =
+        api_key
+        |> reconnect_socket()
+        |> subscribe_and_join("channels:app:#{app.id}:public-room", %{})
+
+      ref = push(joined_socket, "custom-event", %{})
+      assert_reply ref, :error, %{reason: "invalid_event"}
+    end
+
+    test "broadcasts client event to other subscribers", %{
+      socket: socket,
+      application: app
+    } do
+      topic = "channels:app:#{app.id}:private-broadcast-room"
+      {:ok, _reply, sender_socket} = subscribe_and_join(socket, topic, %{})
+
+      push(sender_socket, "client-typing", %{"active" => true})
+
+      # broadcast_from excludes sender, so assert_broadcast instead
+      assert_broadcast "client-typing", %{
+        data: %{"active" => true},
+        channel: "private-broadcast-room",
+        user_id: "user_123"
+      }
+    end
+
+    test "rate limits excessive client events", %{
+      socket: socket,
+      application: app,
+      tenant: tenant
+    } do
+      Namespaces.create_namespace(
+        %{pattern: "private-rate-*", max_client_events_per_second: 2},
+        app.id,
+        tenant.id
+      )
+
+      topic = "channels:app:#{app.id}:private-rate-room"
+      {:ok, _reply, socket} = subscribe_and_join(socket, topic, %{})
+
+      # First 2 should succeed
+      ref1 = push(socket, "client-ping", %{})
+      assert_reply ref1, :ok
+      ref2 = push(socket, "client-ping", %{})
+      assert_reply ref2, :ok
+
+      # Third should be rate limited
+      ref3 = push(socket, "client-ping", %{})
+      assert_reply ref3, :error, %{reason: "rate_limited"}
+    end
+  end
+
   describe "terminate/2" do
     test "decrements subscriber count on leave", %{socket: socket, application: app} do
       topic = "channels:app:#{app.id}:leave-room"

@@ -23,6 +23,7 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
 
   alias Ricqchet.Channels
   alias Ricqchet.Channels.Auth
+  alias Ricqchet.Channels.ClientEventRateLimiter
   alias Ricqchet.Channels.History
   alias Ricqchet.Channels.NamespaceConfig
   alias Ricqchet.Channels.SubscriberTracker
@@ -122,6 +123,31 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   end
 
   @impl Phoenix.Channel
+  def handle_in("client-" <> _ = event, payload, socket) do
+    channel_name = socket.assigns.channel_name
+    app_id = socket.assigns.application_id
+    user_id = socket.assigns.user_id
+
+    with :ok <- validate_client_channel(channel_name),
+         :ok <- check_client_rate(app_id, user_id, channel_name) do
+      broadcast_from!(socket, event, %{
+        data: payload,
+        channel: channel_name,
+        user_id: user_id
+      })
+
+      {:reply, :ok, socket}
+    else
+      {:error, reason} ->
+        {:reply, {:error, %{reason: reason}}, socket}
+    end
+  end
+
+  def handle_in(_event, _payload, socket) do
+    {:reply, {:error, %{reason: "invalid_event"}}, socket}
+  end
+
+  @impl Phoenix.Channel
   def terminate(_reason, socket) do
     case parse_topic_from_socket(socket) do
       {:ok, app_id, channel_name} ->
@@ -194,7 +220,25 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
       send(self(), :after_join_presence)
     end
 
+    socket = assign(socket, :channel_name, channel_name)
     {:ok, socket}
+  end
+
+  defp validate_client_channel("private-" <> _), do: :ok
+  defp validate_client_channel("presence-" <> _), do: :ok
+  defp validate_client_channel(_), do: {:error, "client_events_not_allowed"}
+
+  defp check_client_rate(app_id, user_id, channel_name) do
+    limit =
+      case NamespaceConfig.get_namespace_for_channel(app_id, channel_name) do
+        {:ok, %{max_client_events_per_second: limit}} when is_integer(limit) -> limit
+        _ -> 10
+      end
+
+    case ClientEventRateLimiter.check_rate(app_id, user_id, limit) do
+      :ok -> :ok
+      :rate_limited -> {:error, "rate_limited"}
+    end
   end
 
   defp decode_event_data(nil), do: nil
