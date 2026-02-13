@@ -17,7 +17,8 @@ defmodule Ricqchet.Application do
         Ricqchet.FlowControl.SettingsCache,
         Ricqchet.FlowControl.ReconciliationWorker,
         RicqchetWeb.Plugs.RateLimiter.ETSTable,
-        Ricqchet.Channels.SubscriberTracker
+        Ricqchet.Channels.SubscriberTracker,
+        Ricqchet.Channels.NamespaceCache
       ]
       |> Enum.concat(dispatcher_child())
       |> Enum.concat(batch_dispatcher_child())
