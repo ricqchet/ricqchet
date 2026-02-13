@@ -7,6 +7,7 @@ defmodule Ricqchet.Channels do
   """
 
   alias Ricqchet.Channels.EventPublisher
+  alias Ricqchet.Channels.History
   alias Ricqchet.Channels.SubscriberTracker
   alias RicqchetWeb.Channels.Presence
 
@@ -40,6 +41,16 @@ defmodule Ricqchet.Channels do
   """
   def publish_event(application_id, channel, event_name, data, opts \\ []) do
     EventPublisher.publish(application_id, channel, event_name, data, opts)
+  end
+
+  @doc """
+  Returns the most recent event for a channel, or nil if none exist.
+  """
+  def get_last_event(application_id, channel) do
+    case History.get_recent_events(application_id, channel, limit: 1) do
+      [event] -> event
+      [] -> nil
+    end
   end
 
   @doc """

@@ -270,18 +270,18 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
     end
   end
 
-  describe "missed-message recovery" do
-    defp insert_event(app_id, tenant_id, channel, event_name, data \\ %{}) do
-      %ChannelEvent{application_id: app_id, tenant_id: tenant_id}
-      |> ChannelEvent.changeset(%{
-        channel: channel,
-        event_name: event_name,
-        data: Jason.encode!(data),
-        data_size_bytes: byte_size(Jason.encode!(data))
-      })
-      |> Ricqchet.Repo.insert!()
-    end
+  defp insert_event(app_id, tenant_id, channel, event_name, data \\ %{}) do
+    %ChannelEvent{application_id: app_id, tenant_id: tenant_id}
+    |> ChannelEvent.changeset(%{
+      channel: channel,
+      event_name: event_name,
+      data: Jason.encode!(data),
+      data_size_bytes: byte_size(Jason.encode!(data))
+    })
+    |> Ricqchet.Repo.insert!()
+  end
 
+  describe "missed-message recovery" do
     test "recovers missed events on rejoin with last_event_id", %{
       socket: socket,
       application: app,
@@ -344,6 +344,114 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
 
       assert_push "msg-2", %{sequence: seq}
       assert is_integer(seq)
+    end
+  end
+
+  describe "cache channels" do
+    test "sends cached event when cache_enabled and event exists", %{
+      socket: socket,
+      application: app,
+      tenant: tenant
+    } do
+      Namespaces.create_namespace(
+        %{pattern: "cache-*", history_enabled: true, cache_enabled: true},
+        app.id,
+        tenant.id
+      )
+
+      insert_event(app.id, tenant.id, "cache-room", "latest-msg", %{text: "cached"})
+
+      topic = "channels:app:#{app.id}:cache-room"
+      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+
+      assert_push "ricqchet:cached_event", payload
+      assert payload.data == %{"text" => "cached"}
+      assert payload.channel == "cache-room"
+      assert payload.event == "latest-msg"
+      assert is_integer(payload.sequence)
+      assert is_binary(payload.id)
+    end
+
+    test "does not send cached event when cache_enabled is false", %{
+      socket: socket,
+      application: app,
+      tenant: tenant
+    } do
+      Namespaces.create_namespace(
+        %{pattern: "nocache-*", history_enabled: true, cache_enabled: false},
+        app.id,
+        tenant.id
+      )
+
+      insert_event(app.id, tenant.id, "nocache-room", "msg", %{text: "hi"})
+
+      topic = "channels:app:#{app.id}:nocache-room"
+      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+
+      refute_push "ricqchet:cached_event", _, 200
+    end
+
+    test "does not send cached event when no events exist", %{
+      socket: socket,
+      application: app,
+      tenant: tenant
+    } do
+      Namespaces.create_namespace(
+        %{pattern: "empty-*", history_enabled: true, cache_enabled: true},
+        app.id,
+        tenant.id
+      )
+
+      topic = "channels:app:#{app.id}:empty-room"
+      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+
+      refute_push "ricqchet:cached_event", _, 200
+    end
+
+    test "recovery takes priority over cache", %{
+      socket: socket,
+      application: app,
+      tenant: tenant
+    } do
+      Namespaces.create_namespace(
+        %{pattern: "recover-cache-*", history_enabled: true, cache_enabled: true},
+        app.id,
+        tenant.id
+      )
+
+      e1 = insert_event(app.id, tenant.id, "recover-cache-room", "msg-1", %{text: "first"})
+      insert_event(app.id, tenant.id, "recover-cache-room", "msg-2", %{text: "second"})
+
+      topic = "channels:app:#{app.id}:recover-cache-room"
+
+      {:ok, _reply, _socket} =
+        subscribe_and_join(socket, topic, %{"last_event_id" => e1.id})
+
+      # Should get recovery, not cached event
+      assert_push "msg-2", %{data: %{"text" => "second"}}
+      refute_push "ricqchet:cached_event", _, 200
+    end
+
+    test "sends the most recent event as cached", %{
+      socket: socket,
+      application: app,
+      tenant: tenant
+    } do
+      Namespaces.create_namespace(
+        %{pattern: "multi-*", history_enabled: true, cache_enabled: true},
+        app.id,
+        tenant.id
+      )
+
+      insert_event(app.id, tenant.id, "multi-room", "old-msg", %{text: "old"})
+      insert_event(app.id, tenant.id, "multi-room", "new-msg", %{text: "new"})
+
+      topic = "channels:app:#{app.id}:multi-room"
+      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+
+      assert_push "ricqchet:cached_event", payload
+      assert payload.event == "new-msg"
+      assert payload.data == %{"text" => "new"}
     end
   end
 

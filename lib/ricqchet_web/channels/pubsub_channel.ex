@@ -24,6 +24,7 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   alias Ricqchet.Channels
   alias Ricqchet.Channels.Auth
   alias Ricqchet.Channels.History
+  alias Ricqchet.Channels.NamespaceConfig
   alias Ricqchet.Channels.SubscriberTracker
   alias RicqchetWeb.Channels.ChannelSocket
   alias RicqchetWeb.Channels.Presence
@@ -79,6 +80,22 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
           last_event_id: last_event_id,
           channel: channel_name
         })
+    end
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:maybe_send_cached_event, app_id, channel_name}, socket) do
+    with {:ok, %{cache_enabled: true}} <-
+           NamespaceConfig.get_namespace_for_channel(app_id, channel_name),
+         %{} = event <- Channels.get_last_event(app_id, channel_name) do
+      push(socket, "ricqchet:cached_event", %{
+        data: decode_event_data(event.data),
+        channel: event.channel,
+        event: event.event_name,
+        sequence: event.sequence,
+        id: event.id
+      })
     end
 
     {:noreply, socket}
@@ -169,6 +186,8 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
 
     if last_event_id do
       send(self(), {:recover_events, app_id, channel_name, last_event_id})
+    else
+      send(self(), {:maybe_send_cached_event, app_id, channel_name})
     end
 
     if channel_type(channel_name) == :presence do
