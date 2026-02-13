@@ -86,6 +86,47 @@ defmodule Ricqchet.Channels.SubscriberTracker do
     :ets.select(@table, match_spec)
   end
 
+  @doc """
+  Gets the total subscriber count across all cluster nodes.
+
+  Calls `get_count/2` on each node via `:erpc` with a 5-second timeout.
+  Nodes that fail to respond are excluded from the total.
+  """
+  @spec get_cluster_count(String.t(), String.t()) :: non_neg_integer()
+  def get_cluster_count(application_id, channel_name) do
+    [node() | Node.list()]
+    |> Enum.map(fn n ->
+      try do
+        :erpc.call(n, __MODULE__, :get_count, [application_id, channel_name], 5_000)
+      catch
+        _, _ -> 0
+      end
+    end)
+    |> Enum.sum()
+  end
+
+  @doc """
+  Lists all active channels across all cluster nodes with merged counts.
+
+  Calls `list_active/1` on each node via `:erpc` and sums counts
+  per channel. Nodes that fail to respond are excluded.
+  """
+  @spec list_active_cluster(String.t()) :: [{String.t(), non_neg_integer()}]
+  def list_active_cluster(application_id) do
+    [node() | Node.list()]
+    |> Enum.flat_map(fn n ->
+      try do
+        :erpc.call(n, __MODULE__, :list_active, [application_id], 5_000)
+      catch
+        _, _ -> []
+      end
+    end)
+    |> Enum.reduce(%{}, fn {channel, count}, acc ->
+      Map.update(acc, channel, count, &(&1 + count))
+    end)
+    |> Enum.to_list()
+  end
+
   ## Server Callbacks
 
   @impl GenServer

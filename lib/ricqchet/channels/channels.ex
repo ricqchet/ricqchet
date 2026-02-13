@@ -60,7 +60,7 @@ defmodule Ricqchet.Channels do
   """
   def list_channels(application_id) do
     application_id
-    |> SubscriberTracker.list_active()
+    |> SubscriberTracker.list_active_cluster()
     |> Enum.map(fn {name, count} ->
       %{name: name, subscriber_count: count, type: channel_type(name)}
     end)
@@ -72,7 +72,7 @@ defmodule Ricqchet.Channels do
   Returns a map with channel name, subscriber count, type, and occupied flag.
   """
   def get_channel_info(application_id, channel_name) do
-    count = SubscriberTracker.get_count(application_id, channel_name)
+    count = SubscriberTracker.get_cluster_count(application_id, channel_name)
 
     info = %{
       name: channel_name,
