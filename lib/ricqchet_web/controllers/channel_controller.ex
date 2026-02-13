@@ -30,21 +30,14 @@ defmodule RicqchetWeb.ChannelController do
   def create(conn, params) do
     application = conn.assigns.current_application
 
-    with {:ok, channels} <- extract_channels(params),
-         {:ok, event} <- extract_event(params) do
-      data = Map.get(params, "data", %{})
-      socket_id = Map.get(params, "socket_id")
-      opts = if socket_id, do: [socket_id: socket_id], else: []
-
-      event_ids =
-        Enum.map(channels, fn channel ->
-          {:ok, result} = Channels.publish_event(application.id, channel, event, data, opts)
-          result.id
-        end)
-
+    with :ok <- check_channels_enabled(application),
+         {:ok, channels} <- extract_channels(params),
+         {:ok, event} <- extract_event(params),
+         :ok <- validate_all_channels(channels),
+         {:ok, event_ids} <- publish_to_channels(application.id, channels, event, params) do
       conn
       |> put_status(:accepted)
-      |> render(:created, event_ids: event_ids, channel: List.first(channels))
+      |> render(:created, event_ids: event_ids, channels: channels)
     end
   end
 
@@ -55,9 +48,11 @@ defmodule RicqchetWeb.ChannelController do
   """
   def index(conn, _params) do
     application = conn.assigns.current_application
-    channels = Channels.list_channels(application.id)
 
-    render(conn, :index, channels: channels)
+    with :ok <- check_channels_enabled(application) do
+      channels = Channels.list_channels(application.id)
+      render(conn, :index, channels: channels)
+    end
   end
 
   @doc """
@@ -67,9 +62,33 @@ defmodule RicqchetWeb.ChannelController do
   """
   def show(conn, %{"channel_name" => channel_name}) do
     application = conn.assigns.current_application
-    info = Channels.get_channel_info(application.id, channel_name)
 
-    render(conn, :show, channel: info)
+    with :ok <- check_channels_enabled(application) do
+      info = Channels.get_channel_info(application.id, channel_name)
+      render(conn, :show, channel: info)
+    end
+  end
+
+  defp publish_to_channels(application_id, channels, event, params) do
+    data = Map.get(params, "data", %{})
+    socket_id = Map.get(params, "socket_id")
+    opts = if socket_id, do: [socket_id: socket_id], else: []
+
+    event_ids =
+      Enum.map(channels, fn channel ->
+        {:ok, result} = Channels.publish_event(application_id, channel, event, data, opts)
+        result.id
+      end)
+
+    {:ok, event_ids}
+  end
+
+  defp check_channels_enabled(application) do
+    if application.channels_enabled do
+      :ok
+    else
+      {:error, :forbidden}
+    end
   end
 
   defp extract_channels(%{"channel" => channel}) when is_binary(channel) and channel != "" do
@@ -101,5 +120,14 @@ defmodule RicqchetWeb.ChannelController do
 
   defp extract_event(_) do
     {:error, :validation, "event is required"}
+  end
+
+  defp validate_all_channels(channels) do
+    Enum.reduce_while(channels, :ok, fn channel, :ok ->
+      case Channels.validate_channel_name(channel) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, :validation, reason}}
+      end
+    end)
   end
 end

@@ -44,6 +44,8 @@ defmodule RicqchetWeb.ChannelControllerTest do
 
       response = json_response(conn, 202)
       assert length(response["event_ids"]) == 3
+      assert response["channels"] == ["room-1", "room-2", "room-3"]
+      refute Map.has_key?(response, "channel")
     end
 
     test "delivers event to PubSub subscribers", %{conn: conn, application: app} do
@@ -106,6 +108,43 @@ defmodule RicqchetWeb.ChannelControllerTest do
         })
 
       assert json_response(conn, 422)
+    end
+
+    test "rejects invalid channel name", %{conn: conn} do
+      conn =
+        post(conn, "/v1/channels/events", %{
+          "channel" => "invalid name!",
+          "event" => "test",
+          "data" => %{}
+        })
+
+      assert json_response(conn, 422)
+    end
+
+    test "rejects private channel prefix", %{conn: conn} do
+      conn =
+        post(conn, "/v1/channels/events", %{
+          "channel" => "private-room",
+          "event" => "test",
+          "data" => %{}
+        })
+
+      assert json_response(conn, 422)
+    end
+
+    test "returns 403 when channels not enabled", %{conn: conn, application: app} do
+      app
+      |> Ecto.Changeset.change(channels_enabled: false)
+      |> Ricqchet.Repo.update!()
+
+      conn =
+        post(conn, "/v1/channels/events", %{
+          "channel" => "room",
+          "event" => "test",
+          "data" => %{}
+        })
+
+      assert json_response(conn, 403)
     end
 
     test "returns 401 without API key" do

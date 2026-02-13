@@ -49,7 +49,9 @@ defmodule Ricqchet.Channels.SubscriberTracker do
 
     case :ets.update_counter(@table, key, {2, -1, 0, 0}, {key, 0}) do
       0 ->
-        :ets.delete(@table, key)
+        # Use delete_object to avoid racing with a concurrent track_join
+        # that may have already incremented the counter above 0.
+        :ets.delete_object(@table, {key, 0})
         :last_subscriber
 
       _ ->

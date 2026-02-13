@@ -9,6 +9,31 @@ defmodule Ricqchet.Channels do
   alias Ricqchet.Channels.EventPublisher
   alias Ricqchet.Channels.SubscriberTracker
 
+  @channel_name_regex ~r/\A[a-zA-Z0-9_-]{1,164}\z/
+
+  @doc """
+  Validates a channel name.
+
+  Channel names must be 1–164 characters, alphanumeric plus `-` and `_`.
+  Returns `:ok` or `{:error, reason}`.
+  """
+  @spec validate_channel_name(String.t()) :: :ok | {:error, String.t()}
+  def validate_channel_name(name) when is_binary(name) do
+    cond do
+      not Regex.match?(@channel_name_regex, name) ->
+        {:error,
+         "invalid channel name: must be 1-164 alphanumeric, dash, or underscore characters"}
+
+      String.starts_with?(name, "private-") or String.starts_with?(name, "presence-") ->
+        {:error, "private and presence channels are not yet supported"}
+
+      true ->
+        :ok
+    end
+  end
+
+  def validate_channel_name(_), do: {:error, "channel name must be a string"}
+
   @doc """
   Publishes an event to a channel.
 

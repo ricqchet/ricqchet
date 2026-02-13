@@ -45,21 +45,21 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
     test "rejects private channel in Phase 1", %{socket: socket, application: app} do
       topic = "channels:app:#{app.id}:private-room"
 
-      assert {:error, %{reason: "channel_type_not_supported"}} =
+      assert {:error, %{reason: "private and presence" <> _}} =
                subscribe_and_join(socket, topic, %{})
     end
 
     test "rejects presence channel in Phase 1", %{socket: socket, application: app} do
       topic = "channels:app:#{app.id}:presence-lobby"
 
-      assert {:error, %{reason: "channel_type_not_supported"}} =
+      assert {:error, %{reason: "private and presence" <> _}} =
                subscribe_and_join(socket, topic, %{})
     end
 
     test "rejects invalid channel name", %{socket: socket, application: app} do
       topic = "channels:app:#{app.id}:invalid name!"
 
-      assert {:error, %{reason: "invalid_channel_name"}} =
+      assert {:error, %{reason: "invalid channel name" <> _}} =
                subscribe_and_join(socket, topic, %{})
     end
 
@@ -67,7 +67,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       long_name = String.duplicate("a", 165)
       topic = "channels:app:#{app.id}:#{long_name}"
 
-      assert {:error, %{reason: "invalid_channel_name"}} =
+      assert {:error, %{reason: "invalid channel name" <> _}} =
                subscribe_and_join(socket, topic, %{})
     end
 

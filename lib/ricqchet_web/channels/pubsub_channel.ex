@@ -21,30 +21,15 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
 
   require Logger
 
+  alias Ricqchet.Channels
   alias Ricqchet.Channels.SubscriberTracker
-
-  @channel_name_regex ~r/\A[a-zA-Z0-9_-]{1,164}\z/
+  alias RicqchetWeb.Channels.ChannelSocket
 
   @impl Phoenix.Channel
   def join("channels:app:" <> rest, _params, socket) do
     case parse_topic(rest) do
       {:ok, app_id, channel_name} ->
-        cond do
-          app_id != socket.assigns.application_id ->
-            {:error, %{reason: "unauthorized"}}
-
-          not valid_channel_name?(channel_name) ->
-            {:error, %{reason: "invalid_channel_name"}}
-
-          private_or_presence?(channel_name) ->
-            {:error, %{reason: "channel_type_not_supported"}}
-
-          true ->
-            topic = "channels:app:#{app_id}:#{channel_name}"
-            Phoenix.PubSub.subscribe(Ricqchet.PubSub, topic)
-            SubscriberTracker.track_join(app_id, channel_name)
-            {:ok, socket}
-        end
+        authorize_and_join(app_id, channel_name, socket)
 
       :error ->
         {:error, %{reason: "invalid_topic"}}
@@ -57,8 +42,7 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
 
   @impl Phoenix.Channel
   def handle_info({:channel_event, payload}, socket) do
-    # Skip sending to the socket that originated the event
-    if payload[:socket_id] && payload[:socket_id] == socket_id(socket) do
+    if payload[:socket_id] && payload[:socket_id] == ChannelSocket.id(socket) do
       {:noreply, socket}
     else
       push(socket, payload.event, %{data: payload.data, channel: payload.channel})
@@ -79,6 +63,23 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     :ok
   end
 
+  defp authorize_and_join(app_id, channel_name, socket) do
+    if app_id != socket.assigns.application_id do
+      {:error, %{reason: "unauthorized"}}
+    else
+      case Channels.validate_channel_name(channel_name) do
+        :ok ->
+          topic = "channels:app:#{app_id}:#{channel_name}"
+          Phoenix.PubSub.subscribe(Ricqchet.PubSub, topic)
+          SubscriberTracker.track_join(app_id, channel_name)
+          {:ok, socket}
+
+        {:error, reason} ->
+          {:error, %{reason: reason}}
+      end
+    end
+  end
+
   defp parse_topic(rest) do
     case String.split(rest, ":", parts: 2) do
       [app_id, channel_name] when app_id != "" and channel_name != "" ->
@@ -94,15 +95,5 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
       "channels:app:" <> rest -> parse_topic(rest)
       _ -> :error
     end
-  end
-
-  defp valid_channel_name?(name), do: Regex.match?(@channel_name_regex, name)
-
-  defp private_or_presence?(name) do
-    String.starts_with?(name, "private-") or String.starts_with?(name, "presence-")
-  end
-
-  defp socket_id(socket) do
-    "channel_socket:#{socket.assigns.application_id}:#{socket.assigns.user_id}"
   end
 end

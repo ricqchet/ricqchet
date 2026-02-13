@@ -3,8 +3,12 @@ defmodule RicqchetWeb.ChannelJSON do
   JSON views for channel endpoints.
   """
 
-  def render("created.json", %{event_ids: event_ids, channel: channel}) do
+  def render("created.json", %{event_ids: event_ids, channels: [channel]}) do
     %{event_ids: event_ids, channel: channel}
+  end
+
+  def render("created.json", %{event_ids: event_ids, channels: channels}) do
+    %{event_ids: event_ids, channels: channels}
   end
 
   def render("index.json", %{channels: channels}) do
