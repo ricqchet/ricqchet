@@ -122,6 +122,11 @@ defmodule RicqchetWeb.Router do
     get "/messages/:id", MessageController, :show
     delete "/messages/:id", MessageController, :delete
     get "/signing-secret", TenantController, :signing_secret
+
+    # Channel endpoints
+    post "/channels/events", ChannelController, :create
+    get "/channels", ChannelController, :index
+    get "/channels/:channel_name", ChannelController, :show
   end
 
   # Enable LiveDashboard in development with basic auth protection

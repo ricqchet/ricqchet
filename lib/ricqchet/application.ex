@@ -16,7 +16,8 @@ defmodule Ricqchet.Application do
         {Oban, Application.fetch_env!(:ricqchet, Oban)},
         Ricqchet.FlowControl.SettingsCache,
         Ricqchet.FlowControl.ReconciliationWorker,
-        RicqchetWeb.Plugs.RateLimiter.ETSTable
+        RicqchetWeb.Plugs.RateLimiter.ETSTable,
+        Ricqchet.Channels.SubscriberTracker
       ]
       |> Enum.concat(dispatcher_child())
       |> Enum.concat(batch_dispatcher_child())
