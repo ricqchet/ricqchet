@@ -16,12 +16,17 @@ defmodule RicqchetWeb.ChannelJSON do
   end
 
   def render("show.json", %{channel: channel}) do
-    %{
+    data = %{
       name: channel.name,
       type: channel.type,
       subscriber_count: channel.subscriber_count,
       occupied: channel.occupied
     }
+
+    case Map.get(channel, :members) do
+      nil -> data
+      members -> Map.put(data, :members, members)
+    end
   end
 
   defp channel_summary(channel) do

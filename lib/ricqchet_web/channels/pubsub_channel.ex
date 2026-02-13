@@ -26,6 +26,9 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   alias Ricqchet.Channels.History
   alias Ricqchet.Channels.SubscriberTracker
   alias RicqchetWeb.Channels.ChannelSocket
+  alias RicqchetWeb.Channels.Presence
+
+  intercept ["presence_diff"]
 
   @impl Phoenix.Channel
   def join("channels:app:" <> rest, params, socket) do
@@ -78,6 +81,26 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
         })
     end
 
+    {:noreply, socket}
+  end
+
+  def handle_info(:after_join_presence, socket) do
+    user_id = socket.assigns.user_id
+    user_info = socket.assigns.user_info
+
+    {:ok, _ref} =
+      Presence.track(socket, user_id, %{
+        user_info: user_info,
+        joined_at: System.system_time(:second)
+      })
+
+    push(socket, "presence_state", Presence.list(socket))
+    {:noreply, socket}
+  end
+
+  @impl Phoenix.Channel
+  def handle_out("presence_diff", diff, socket) do
+    push(socket, "presence_diff", diff)
     {:noreply, socket}
   end
 
@@ -146,6 +169,10 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
 
     if last_event_id do
       send(self(), {:recover_events, app_id, channel_name, last_event_id})
+    end
+
+    if channel_type(channel_name) == :presence do
+      send(self(), :after_join_presence)
     end
 
     {:ok, socket}
