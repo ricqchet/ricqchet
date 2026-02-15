@@ -14,6 +14,29 @@ defmodule RicqchetWeb.MessageController do
 
   tags(["messages"])
 
+  operation(:index,
+    summary: "List messages",
+    description: "Lists messages for the authenticated tenant with optional filtering.",
+    parameters: [
+      status: [
+        in: :query,
+        schema: %Schema{type: :string, enum: ["pending", "dispatched", "delivered", "failed"]},
+        required: false,
+        description: "Filter by status"
+      ],
+      limit: [
+        in: :query,
+        schema: %Schema{type: :integer, minimum: 1, maximum: 100},
+        required: false,
+        description: "Max messages to return (default: 20)"
+      ]
+    ],
+    responses: %{
+      200 => {"Messages list", "application/json", Schemas.MessageList}
+    },
+    security: [%{"bearer_auth" => []}]
+  )
+
   operation(:show,
     summary: "Get message status",
     description: "Retrieves the current status and details of a message.",
@@ -46,6 +69,25 @@ defmodule RicqchetWeb.MessageController do
     responses: Schemas.Helpers.delete_responses(Schemas.CancelledResponse),
     security: [%{"bearer_auth" => []}]
   )
+
+  @doc """
+  Lists messages for the authenticated tenant.
+  """
+  def index(conn, params) do
+    tenant = conn.assigns.current_tenant
+
+    opts = [
+      status: params["status"],
+      limit: parse_limit(params["limit"])
+    ]
+
+    {:ok, messages} = Messages.list_for_tenant(tenant, opts)
+    render(conn, :index, messages: messages)
+  end
+
+  defp parse_limit(nil), do: 20
+  defp parse_limit(val) when is_binary(val), do: String.to_integer(val)
+  defp parse_limit(val) when is_integer(val), do: val
 
   @doc """
   Gets the status and details of a message.

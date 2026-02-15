@@ -3,7 +3,7 @@ import Config
 # Configure your database
 config :ricqchet, Ricqchet.Repo,
   username: "postgres",
-  password: "postgres",
+  password: "password",
   hostname: "localhost",
   database: "ricqchet_dev",
   stacktrace: true,

@@ -117,6 +117,36 @@ defmodule Ricqchet.Messages do
   end
 
   @doc """
+  Lists messages for a tenant with optional filtering.
+
+  ## Options
+
+    * `:status` - Filter by status ("pending", "dispatched", "delivered", "failed")
+    * `:limit` - Max messages to return (default: 20, max: 100)
+
+  Returns `{:ok, messages}`.
+  """
+  def list_for_tenant(%Tenant{id: tenant_id}, opts \\ []) do
+    status = Keyword.get(opts, :status)
+    limit = opts |> Keyword.get(:limit, 20) |> min(100)
+
+    query =
+      Message
+      |> where([m], m.tenant_id == ^tenant_id)
+      |> order_by([m], desc: m.inserted_at)
+      |> limit(^limit)
+
+    query =
+      if status do
+        where(query, [m], m.status == ^status)
+      else
+        query
+      end
+
+    {:ok, Repo.all(query)}
+  end
+
+  @doc """
   Gets an existing message by dedup_key for a tenant.
 
   Only returns messages that are:

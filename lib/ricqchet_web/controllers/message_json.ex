@@ -8,10 +8,26 @@ defmodule RicqchetWeb.MessageJSON do
   @doc """
   Renders message responses.
 
+  - `index.json` - Renders list of messages
   - `show.json` - Renders message details including status, attempts, timestamps
   - `cancelled.json` - Renders cancellation confirmation
   """
+  def render("index.json", %{messages: messages}) do
+    %{
+      messages: Enum.map(messages, &message_to_json/1),
+      has_more: false
+    }
+  end
+
   def render("show.json", %{message: %Message{} = message}) do
+    message_to_json(message)
+  end
+
+  def render("cancelled.json", _assigns) do
+    %{cancelled: true}
+  end
+
+  defp message_to_json(%Message{} = message) do
     %{
       id: message.id,
       status: message.status,
@@ -26,9 +42,5 @@ defmodule RicqchetWeb.MessageJSON do
       last_error: message.last_error,
       last_response_status: message.last_response_status
     }
-  end
-
-  def render("cancelled.json", _assigns) do
-    %{cancelled: true}
   end
 end

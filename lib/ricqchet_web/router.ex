@@ -123,6 +123,7 @@ defmodule RicqchetWeb.Router do
     pipe_through [:api, :authenticated]
 
     post "/publish", PublishController, :create
+    get "/messages", MessageController, :index
     get "/messages/:id", MessageController, :show
     delete "/messages/:id", MessageController, :delete
     get "/signing-secret", TenantController, :signing_secret
