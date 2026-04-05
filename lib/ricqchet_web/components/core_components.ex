@@ -112,8 +112,10 @@ defmodule RicqchetWeb.CoreComponents do
       {@rest}
       class={[
         "fixed top-4 right-4 z-50 w-80 rounded-lg p-4 shadow-lg ring-1 ring-black/5",
-        @kind == :info && "bg-blue-50 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200",
-        @kind == :error && "bg-red-50 text-red-800 dark:bg-red-900/80 dark:text-red-200"
+        @kind == :info &&
+          "bg-brand-500/10 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400",
+        @kind == :error &&
+          "bg-accent-500/10 text-accent-600 dark:bg-accent-400/20 dark:text-accent-400"
       ]}
     >
       <p :if={@title} class="text-sm font-semibold leading-6">
@@ -484,13 +486,13 @@ defmodule RicqchetWeb.CoreComponents do
     do: "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
 
   defp badge_variant("success"),
-    do: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+    do: "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
 
   defp badge_variant("warning"),
-    do: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+    do: "bg-amber-500/15 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400"
 
   defp badge_variant("error"),
-    do: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+    do: "bg-accent-400/15 text-accent-500 dark:bg-accent-400/20 dark:text-accent-400"
 
   defp badge_variant("secondary"),
     do: "bg-[hsl(var(--secondary))] text-[hsl(var(--secondary-foreground))]"
