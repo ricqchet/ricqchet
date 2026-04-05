@@ -22,10 +22,7 @@ alias Ricqchet.Users
 tenant_name = "Demo Organization"
 user_email = "admin@demo.local"
 
-user_password =
-  :crypto.strong_rand_bytes(32)
-  |> Base.url_encode64(padding: false)
-  |> binary_part(0, 24)
+user_password = "password123456"
 
 application_name = "Demo Application"
 api_key_name = "Development Key"
