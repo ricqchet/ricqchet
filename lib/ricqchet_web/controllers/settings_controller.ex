@@ -4,6 +4,8 @@ defmodule RicqchetWeb.SettingsController do
   alias Ricqchet.Auth
   alias Ricqchet.Tenants
 
+  plug :put_layout, html: {RicqchetWeb.Layouts, :app}
+
   def index(conn, _params) do
     render(conn, :index,
       page_title: "Settings",
