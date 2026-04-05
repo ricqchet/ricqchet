@@ -33,40 +33,15 @@ defmodule RicqchetWeb.TeamLive do
 
   def handle_event("invite_user", %{"email" => email, "role" => role}, socket)
       when role in @roles do
-    tenant = socket.assigns.current_tenant
-    current_user = socket.assigns.current_user
-
-    case Tenants.invite_user(tenant, current_user, %{"email" => email, "role" => role}) do
-      {:ok, _invitation} ->
-        {:ok, {users, _meta}} = Users.list_users_for_tenant_paginated(tenant, %{})
-
-        {:noreply,
-         socket
-         |> assign(:users, users)
-         |> assign(:show_invite_modal, false)
-         |> put_flash(:info, "Invitation sent to #{email}.")}
-
-      {:error, _changeset} ->
-        {:noreply, assign(socket, :invite_error, "Failed to send invitation.")}
+    with :ok <- require_admin(socket) do
+      do_invite_user(socket, email, role)
     end
   end
 
   def handle_event("update_role", %{"user-id" => user_id, "role" => role}, socket)
       when role in @roles do
-    tenant = socket.assigns.current_tenant
-    user = Users.get_user_by_tenant(tenant, user_id)
-
-    if user do
-      case Users.update_user(user, %{"role" => role}) do
-        {:ok, _user} ->
-          {:ok, {users, _meta}} = Users.list_users_for_tenant_paginated(tenant, %{})
-          {:noreply, assign(socket, :users, users)}
-
-        {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Failed to update role.")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "User not found.")}
+    with :ok <- require_admin(socket) do
+      do_update_role(socket, user_id, role)
     end
   end
 
@@ -80,22 +55,92 @@ defmodule RicqchetWeb.TeamLive do
   end
 
   def handle_event("remove_user", _params, socket) do
-    case Tenants.remove_user_from_tenant(socket.assigns.remove_user) do
-      {:ok, _} ->
-        {:ok, {users, _meta}} =
-          Users.list_users_for_tenant_paginated(socket.assigns.current_tenant, %{})
+    with :ok <- require_admin(socket),
+         %{} = user <- socket.assigns.remove_user,
+         :ok <- validate_not_self(socket, user) do
+      do_remove_user(socket, user)
+    else
+      nil -> {:noreply, close_remove_modal(socket, "User not found.")}
+      {:noreply, _} = result -> result
+    end
+  end
 
+  # Action helpers
+
+  defp do_invite_user(socket, email, role) do
+    tenant = socket.assigns.current_tenant
+
+    case Tenants.invite_user(tenant, socket.assigns.current_user, %{
+           "email" => email,
+           "role" => role
+         }) do
+      {:ok, _invitation} ->
         {:noreply,
          socket
-         |> assign(:users, users)
+         |> reload_users()
+         |> assign(:show_invite_modal, false)
+         |> put_flash(:info, "Invitation sent to #{email}.")}
+
+      {:error, _changeset} ->
+        {:noreply, assign(socket, :invite_error, "Failed to send invitation.")}
+    end
+  end
+
+  defp do_update_role(socket, user_id, role) do
+    user = Users.get_user_by_tenant(socket.assigns.current_tenant, user_id)
+
+    if user do
+      case Users.update_user(user, %{"role" => role}) do
+        {:ok, _user} -> {:noreply, reload_users(socket)}
+        {:error, _changeset} -> {:noreply, put_flash(socket, :error, "Failed to update role.")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "User not found.")}
+    end
+  end
+
+  defp do_remove_user(socket, user) do
+    case Tenants.remove_user_from_tenant(user) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> reload_users()
          |> assign(show_remove_modal: false, remove_user: nil)
          |> put_flash(:info, "Team member removed.")}
 
       {:error, _} ->
-        {:noreply,
-         socket
-         |> assign(show_remove_modal: false, remove_user: nil)
-         |> put_flash(:error, "Failed to remove team member.")}
+        {:noreply, close_remove_modal(socket, "Failed to remove team member.")}
     end
+  end
+
+  # Guards and helpers
+
+  defp require_admin(socket) do
+    if socket.assigns.current_user.role == "admin" do
+      :ok
+    else
+      {:noreply, put_flash(socket, :error, "Only admins can perform this action.")}
+    end
+  end
+
+  defp validate_not_self(socket, user) do
+    if user.id == socket.assigns.current_user.id do
+      {:noreply, close_remove_modal(socket, "You cannot remove yourself.")}
+    else
+      :ok
+    end
+  end
+
+  defp reload_users(socket) do
+    {:ok, {users, _meta}} =
+      Users.list_users_for_tenant_paginated(socket.assigns.current_tenant, %{})
+
+    assign(socket, :users, users)
+  end
+
+  defp close_remove_modal(socket, error_msg) do
+    socket
+    |> assign(show_remove_modal: false, remove_user: nil)
+    |> put_flash(:error, error_msg)
   end
 end

@@ -16,23 +16,15 @@ defmodule RicqchetWeb.SettingsController do
 
   def update_tenant(conn, %{"name" => name}) do
     case Tenants.update_tenant(conn.assigns.current_tenant, %{name: name}) do
-      {:ok, tenant} ->
+      {:ok, _tenant} ->
         conn
         |> put_flash(:info, "Organization name updated.")
-        |> render(:index,
-          page_title: "Settings",
-          current_path: "/settings",
-          tenant: tenant
-        )
+        |> redirect(to: ~p"/settings")
 
       {:error, _changeset} ->
         conn
         |> put_flash(:error, "Failed to update organization name.")
-        |> render(:index,
-          page_title: "Settings",
-          current_path: "/settings",
-          tenant: conn.assigns.current_tenant
-        )
+        |> redirect(to: ~p"/settings")
     end
   end
 
@@ -50,20 +42,12 @@ defmodule RicqchetWeb.SettingsController do
       {:error, :invalid_current_password} ->
         conn
         |> put_flash(:error, "Current password is incorrect.")
-        |> render(:index,
-          page_title: "Settings",
-          current_path: "/settings",
-          tenant: conn.assigns.current_tenant
-        )
+        |> redirect(to: ~p"/settings")
 
       {:error, _changeset} ->
         conn
         |> put_flash(:error, "Failed to change password.")
-        |> render(:index,
-          page_title: "Settings",
-          current_path: "/settings",
-          tenant: conn.assigns.current_tenant
-        )
+        |> redirect(to: ~p"/settings")
     end
   end
 end

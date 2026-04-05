@@ -24,6 +24,9 @@
       <button
         class="md:hidden p-2 rounded-md hover:bg-[hsl(var(--accent))]"
         phx-click={JS.toggle(to: "#mobile-sidebar")}
+        aria-controls="mobile-sidebar"
+        aria-expanded="false"
+        aria-label="Toggle navigation menu"
       >
         <span class="hero-bars-3 h-5 w-5" />
       </button>

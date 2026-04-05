@@ -50,8 +50,6 @@ defmodule RicqchetWeb.CoreComponents do
       />
       <div
         class="fixed inset-0 overflow-y-auto"
-        aria-labelledby={"#{@id}-title"}
-        aria-describedby={"#{@id}-description"}
         role="dialog"
         aria-modal="true"
         tabindex="0"

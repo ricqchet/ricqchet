@@ -28,8 +28,8 @@ defmodule RicqchetWeb.SessionController do
     case Auth.login(email, password) do
       {:ok, %{user: user}} ->
         conn
-        |> put_session(:user_id, user.id)
         |> configure_session(renew: true)
+        |> put_session(:user_id, user.id)
         |> put_flash(:info, "Welcome back!")
         |> redirect(to: ~p"/dashboard")
 
@@ -57,7 +57,11 @@ defmodule RicqchetWeb.SessionController do
 
   defp format_changeset_errors(changeset) do
     changeset
-    |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
+    |> Ecto.Changeset.traverse_errors(fn {msg, opts} ->
+      Enum.reduce(opts, msg, fn {key, value}, acc ->
+        String.replace(acc, "%{#{key}}", to_string(value))
+      end)
+    end)
     |> Enum.map_join("; ", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
   end
 end

@@ -10,23 +10,15 @@ defmodule RicqchetWeb.Auth.LiveAuth do
   use RicqchetWeb, :verified_routes
 
   def on_mount(:ensure_authenticated, _params, session, socket) do
-    user_id = session["user_id"]
-
-    if user_id do
-      case Ricqchet.Users.get_user(user_id) do
-        %{status: "active"} = user ->
-          tenant = Ricqchet.Tenants.get_tenant!(user.tenant_id)
-
-          {:cont,
-           socket
-           |> assign(:current_user, user)
-           |> assign(:current_tenant, tenant)}
-
-        _other ->
-          {:halt, redirect(socket, to: ~p"/login")}
-      end
+    with user_id when is_binary(user_id) <- session["user_id"],
+         %{status: "active"} = user <- Ricqchet.Users.get_user(user_id),
+         %{} = tenant <- Ricqchet.Tenants.get_tenant(user.tenant_id) do
+      {:cont,
+       socket
+       |> assign(:current_user, user)
+       |> assign(:current_tenant, tenant)}
     else
-      {:halt, redirect(socket, to: ~p"/login")}
+      _ -> {:halt, redirect(socket, to: ~p"/login")}
     end
   end
 end

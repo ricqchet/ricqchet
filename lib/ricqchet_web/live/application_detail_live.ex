@@ -72,31 +72,35 @@ defmodule RicqchetWeb.ApplicationDetailLive do
   end
 
   def handle_event("revoke_api_key", %{"id" => id}, socket) do
-    api_key = ApiKeys.get_api_key(id)
+    case find_owned_api_key(socket, id) do
+      {:ok, api_key} ->
+        case ApiKeys.revoke_api_key(api_key) do
+          {:ok, _} ->
+            api_keys = ApiKeys.list_api_keys_for_application(socket.assigns.application)
 
-    if api_key do
-      case ApiKeys.revoke_api_key(api_key) do
-        {:ok, _} ->
-          api_keys = ApiKeys.list_api_keys_for_application(socket.assigns.application)
+            {:noreply,
+             socket
+             |> assign(:api_keys, api_keys)
+             |> put_flash(:info, "API key revoked.")}
 
-          {:noreply,
-           socket
-           |> assign(:api_keys, api_keys)
-           |> put_flash(:info, "API key revoked.")}
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Failed to revoke API key.")}
+        end
 
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to revoke API key.")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "API key not found.")}
+      :error ->
+        {:noreply, put_flash(socket, :error, "API key not found.")}
     end
   end
 
   def handle_event("show_rotate_modal", %{"id" => id}, socket) do
-    key = ApiKeys.get_api_key(id)
+    case find_owned_api_key(socket, id) do
+      {:ok, key} ->
+        {:noreply,
+         assign(socket, show_rotate_key_modal: true, rotate_key: key, rotated_key_value: nil)}
 
-    {:noreply,
-     assign(socket, show_rotate_key_modal: true, rotate_key: key, rotated_key_value: nil)}
+      :error ->
+        {:noreply, put_flash(socket, :error, "API key not found.")}
+    end
   end
 
   def handle_event("close_rotate_modal", _params, socket) do
@@ -105,17 +109,31 @@ defmodule RicqchetWeb.ApplicationDetailLive do
   end
 
   def handle_event("rotate_api_key", _params, socket) do
-    case ApiKeys.rotate_api_key(socket.assigns.rotate_key) do
-      {:ok, {_old, new_key}} ->
-        api_keys = ApiKeys.list_api_keys_for_application(socket.assigns.application)
+    if socket.assigns.rotate_key do
+      case ApiKeys.rotate_api_key(socket.assigns.rotate_key) do
+        {:ok, {_old, new_key}} ->
+          api_keys = ApiKeys.list_api_keys_for_application(socket.assigns.application)
 
-        {:noreply,
-         socket
-         |> assign(:api_keys, api_keys)
-         |> assign(:rotated_key_value, new_key.api_key)}
+          {:noreply,
+           socket
+           |> assign(:api_keys, api_keys)
+           |> assign(:rotated_key_value, new_key.api_key)}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to rotate API key.")}
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to rotate API key.")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "API key not found.")}
+    end
+  end
+
+  defp find_owned_api_key(socket, id) do
+    case ApiKeys.get_api_key_with_application(id) do
+      %{application_id: app_id} = key when app_id == socket.assigns.application.id ->
+        {:ok, key}
+
+      _ ->
+        :error
     end
   end
 
