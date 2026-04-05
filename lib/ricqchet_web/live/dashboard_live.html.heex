@@ -1,0 +1,166 @@
+<.header>
+  Dashboard
+  <:subtitle>Message delivery overview</:subtitle>
+  <:actions>
+    <div class="flex items-center gap-1 rounded-lg border border-[hsl(var(--border))] p-1">
+      <button
+        :for={period <- ~w(5m 1h 4h 1d 1w)}
+        phx-click="change_period"
+        phx-value-period={period}
+        class={[
+          "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+          if(@period == period,
+            do: "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]",
+            else: "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))]"
+          )
+        ]}
+      >
+        {period}
+      </button>
+    </div>
+  </:actions>
+</.header>
+
+<!-- Message Counts -->
+<div class="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-5">
+  <.stats_card label="Total" value={to_string(@message_counts.total)} icon="hero-envelope" />
+  <.stats_card
+    label="Pending"
+    value={to_string(@message_counts.counts[:pending] || 0)}
+    icon="hero-clock"
+  />
+  <.stats_card
+    label="Dispatched"
+    value={to_string(@message_counts.counts[:dispatched] || 0)}
+    icon="hero-paper-airplane"
+  />
+  <.stats_card
+    label="Delivered"
+    value={to_string(@message_counts.counts[:delivered] || 0)}
+    icon="hero-check-circle"
+  />
+  <.stats_card
+    label="Failed"
+    value={to_string(@message_counts.counts[:failed] || 0)}
+    icon="hero-x-circle"
+  />
+</div>
+
+<!-- Delivery Performance -->
+<div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+  <.stats_card
+    label="Success Rate"
+    value={"#{Float.round(@delivery.success_rate * 100, 1)}%"}
+    icon="hero-chart-bar"
+    description={"#{@delivery.total_completed} completed deliveries"}
+  />
+  <.stats_card
+    label="Retry Rate"
+    value={"#{Float.round(@delivery.retry_rate * 100, 1)}%"}
+    icon="hero-arrow-path"
+  />
+  <.stats_card
+    label="Avg Response Time"
+    value={"#{@delivery.delivery_times.average_ms}ms"}
+    icon="hero-bolt"
+    description={"p95: #{@delivery.delivery_times.p95_ms}ms / p99: #{@delivery.delivery_times.p99_ms}ms"}
+  />
+</div>
+
+<div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+  <!-- Error Breakdown -->
+  <.card>
+    <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Error Breakdown</h3>
+    <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+      {to_string(@errors.total_errors)} total errors
+    </p>
+
+    <div :if={@errors.total_errors > 0} class="mt-4 space-y-3">
+      <div :for={{type, count} <- @errors.by_type} class="flex items-center justify-between">
+        <span class="text-sm text-[hsl(var(--foreground))]">{format_error_type(type)}</span>
+        <.badge variant="error">{count}</.badge>
+      </div>
+    </div>
+
+    <p :if={@errors.total_errors == 0} class="mt-4 text-sm text-[hsl(var(--muted-foreground))]">
+      No errors in this period
+    </p>
+  </.card>
+
+  <!-- Top Destinations -->
+  <.card>
+    <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Top Destinations</h3>
+
+    <div :if={@destinations.destinations != []} class="mt-4 space-y-3">
+      <div
+        :for={dest <- Enum.take(@destinations.destinations, 5)}
+        class="flex items-center justify-between gap-4"
+      >
+        <span class="truncate text-sm text-[hsl(var(--foreground))]">{dest.url}</span>
+        <div class="flex items-center gap-2 shrink-0">
+          <.badge variant={if(dest.success_rate >= 0.95, do: "success", else: "warning")}>
+            {Float.round(dest.success_rate * 100, 1)}%
+          </.badge>
+          <span class="text-xs text-[hsl(var(--muted-foreground))]">{dest.volume} msgs</span>
+        </div>
+      </div>
+    </div>
+
+    <p :if={@destinations.destinations == []} class="mt-4 text-sm text-[hsl(var(--muted-foreground))]">
+      No destination data
+    </p>
+  </.card>
+</div>
+
+<!-- Activity Feed -->
+<div class="mt-6">
+  <.card>
+    <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Activity Feed</h3>
+    <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+      Real-time message delivery events
+    </p>
+
+    <div class="mt-4">
+      <div :if={@activity_events == [] && @recent_activity.data == []} class="text-sm text-[hsl(var(--muted-foreground))] py-8 text-center">
+        No recent activity
+      </div>
+
+      <div class="space-y-2">
+        <!-- Live events from PubSub -->
+        <div
+          :for={event <- @activity_events}
+          class="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] px-4 py-2"
+        >
+          <div class="flex items-center gap-3 min-w-0">
+            <.status_dot status={event.status} />
+            <span class="truncate text-sm">{event.destination_url}</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <.badge variant={status_variant(event.status)}>{event.status}</.badge>
+            <span class="text-xs text-[hsl(var(--muted-foreground))]">
+              {format_attempts(event.attempts)}
+            </span>
+          </div>
+        </div>
+
+        <!-- Historical events (when no live events) -->
+        <div
+          :for={event <- @recent_activity.data}
+          :if={@activity_events == []}
+          class="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] px-4 py-2"
+        >
+          <div class="flex items-center gap-3 min-w-0">
+            <.status_dot status={event.status} />
+            <span class="truncate text-sm">{event.destination_url}</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <.badge variant={status_variant(event.status)}>{event.status}</.badge>
+            <span class="text-xs text-[hsl(var(--muted-foreground))]">
+              {format_attempts(event.attempts)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </.card>
+</div>

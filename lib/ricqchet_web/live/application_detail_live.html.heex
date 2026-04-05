@@ -1,0 +1,124 @@
+<.header>
+  {@application.name}
+  <:subtitle>Application settings and API keys</:subtitle>
+  <:actions>
+    <.link navigate={~p"/applications"} class="text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+      <span class="hero-arrow-left-mini h-4 w-4" /> Back to applications
+    </.link>
+  </:actions>
+</.header>
+
+<div class="mt-8 space-y-8 max-w-4xl">
+  <!-- Application Settings -->
+  <.card>
+    <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Settings</h3>
+
+    <form phx-submit="update_application" class="mt-4 space-y-4">
+      <.input name="name" type="text" label="Name" value={@application.name} required />
+      <.input name="description" type="textarea" label="Description" value={@application.description || ""} />
+      <.input
+        name="dlq_destination_url"
+        type="url"
+        label="DLQ Destination URL"
+        value={Applications.get_dlq_destination(@application) || ""}
+        placeholder="https://example.com/dlq"
+      />
+
+      <.button type="submit">Save changes</.button>
+    </form>
+  </.card>
+
+  <!-- API Keys -->
+  <.card class="p-0 overflow-hidden">
+    <div class="flex items-center justify-between p-6 pb-4">
+      <div>
+        <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">API Keys</h3>
+        <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+          Manage API keys for this application
+        </p>
+      </div>
+      <.button phx-click="show_create_key_modal" variant="secondary">
+        <span class="hero-plus-mini mr-1 h-4 w-4" /> Create key
+      </.button>
+    </div>
+
+    <.table id="api-keys" rows={@api_keys} row_id={fn key -> "key-#{key.id}" end}>
+      <:col :let={key} label="Name">
+        {key.name}
+      </:col>
+      <:col :let={key} label="Key">
+        <code class="text-xs text-[hsl(var(--muted-foreground))]">{format_key_prefix(key)}</code>
+      </:col>
+      <:col :let={key} label="Created">
+        {Calendar.strftime(key.inserted_at, "%b %d, %Y")}
+      </:col>
+      <:col :let={key} label="" class="text-right">
+        <div class="flex items-center justify-end gap-2">
+          <.button variant="ghost" phx-click="show_rotate_modal" phx-value-id={key.id} class="text-xs">
+            <span class="hero-arrow-path-mini h-4 w-4" /> Rotate
+          </.button>
+          <.button variant="ghost" phx-click="revoke_api_key" phx-value-id={key.id} class="text-xs">
+            <span class="hero-trash-mini h-4 w-4 text-[hsl(var(--destructive))]" />
+          </.button>
+        </div>
+      </:col>
+    </.table>
+
+    <div :if={@api_keys == []} class="px-4 py-8 text-center text-sm text-[hsl(var(--muted-foreground))]">
+      No API keys. Create one to start using this application.
+    </div>
+  </.card>
+</div>
+
+<!-- Create API Key Modal -->
+<.modal :if={@show_create_key_modal} id="create-key-modal" show on_cancel={JS.push("close_create_key_modal")}>
+  <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">
+    {if @created_key_value, do: "API Key Created", else: "Create API Key"}
+  </h3>
+
+  <%= if @created_key_value do %>
+    <div class="mt-4 space-y-4">
+      <p class="text-sm text-[hsl(var(--muted-foreground))]">
+        Copy your API key now. You won't be able to see it again.
+      </p>
+      <div class="rounded-md bg-[hsl(var(--muted))] p-3 font-mono text-sm break-all">
+        {@created_key_value}
+      </div>
+      <.button phx-click="close_create_key_modal" class="w-full">Done</.button>
+    </div>
+  <% else %>
+    <form phx-submit="create_api_key" class="mt-4 space-y-4">
+      <.input name="name" type="text" label="Key name" value="" required placeholder="Production" />
+      <.button type="submit" class="w-full">Create API key</.button>
+    </form>
+  <% end %>
+</.modal>
+
+<!-- Rotate API Key Modal -->
+<.modal :if={@show_rotate_key_modal} id="rotate-key-modal" show on_cancel={JS.push("close_rotate_modal")}>
+  <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">
+    {if @rotated_key_value, do: "Key Rotated", else: "Rotate API Key"}
+  </h3>
+
+  <%= if @rotated_key_value do %>
+    <div class="mt-4 space-y-4">
+      <p class="text-sm text-[hsl(var(--muted-foreground))]">
+        Your new API key is ready. The old key has been revoked. Copy it now.
+      </p>
+      <div class="rounded-md bg-[hsl(var(--muted))] p-3 font-mono text-sm break-all">
+        {@rotated_key_value}
+      </div>
+      <.button phx-click="close_rotate_modal" class="w-full">Done</.button>
+    </div>
+  <% else %>
+    <div class="mt-4 space-y-4">
+      <p class="text-sm text-[hsl(var(--muted-foreground))]">
+        This will generate a new key and immediately revoke the current one. Any systems using the old key will stop working.
+      </p>
+      <div class="flex gap-3 justify-end">
+        <.button variant="ghost" phx-click="close_rotate_modal">Cancel</.button>
+        <.button variant="destructive" phx-click="rotate_api_key">Rotate key</.button>
+      </div>
+    </div>
+  <% end %>
+</.modal>

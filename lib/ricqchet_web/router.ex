@@ -1,6 +1,20 @@
 defmodule RicqchetWeb.Router do
   use RicqchetWeb, :router
 
+  pipeline :browser do
+    plug :accepts, ["html"]
+    plug :fetch_session
+    plug :fetch_live_flash
+    plug :put_root_layout, html: {RicqchetWeb.Layouts, :root}
+    plug :protect_from_forgery
+    plug :put_secure_browser_headers
+    plug RicqchetWeb.Plugs.SessionAuthenticate
+  end
+
+  pipeline :require_auth do
+    plug RicqchetWeb.Plugs.RequireAuthenticated
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
   end
@@ -22,6 +36,50 @@ defmodule RicqchetWeb.Router do
   pipeline :auth_rate_limited do
     plug RicqchetWeb.Plugs.AuthRateLimiter
   end
+
+  # ──────────────────────────────────────────────────────────────
+  # Browser routes (UI)
+  # ──────────────────────────────────────────────────────────────
+
+  # Public browser routes (no auth required)
+  scope "/", RicqchetWeb do
+    pipe_through [:browser]
+
+    get "/", PageController, :index
+    get "/login", PageController, :login
+    get "/register", PageController, :register
+    get "/forgot-password", PageController, :forgot_password
+    get "/reset-password", PageController, :reset_password
+    get "/verify-email", PageController, :verify_email
+    get "/accept-invite", PageController, :accept_invite
+
+    post "/session", SessionController, :create
+    post "/session/register", SessionController, :register
+    delete "/session", SessionController, :delete
+
+    post "/forgot-password", PageController, :submit_forgot_password
+  end
+
+  # Authenticated browser routes
+  scope "/", RicqchetWeb do
+    pipe_through [:browser, :require_auth]
+
+    live_session :authenticated,
+      on_mount: [{RicqchetWeb.Auth.LiveAuth, :ensure_authenticated}] do
+      live "/dashboard", DashboardLive
+      live "/applications", ApplicationsLive
+      live "/applications/:id", ApplicationDetailLive
+      live "/team", TeamLive
+    end
+
+    get "/settings", SettingsController, :index
+    put "/settings/tenant", SettingsController, :update_tenant
+    put "/settings/password", SettingsController, :change_password
+  end
+
+  # ──────────────────────────────────────────────────────────────
+  # API routes
+  # ──────────────────────────────────────────────────────────────
 
   # Health check endpoint (no auth required)
   scope "/", RicqchetWeb do

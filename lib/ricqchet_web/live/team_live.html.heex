@@ -1,0 +1,87 @@
+<.header>
+  Team
+  <:subtitle>Manage your team members</:subtitle>
+  <:actions>
+    <.button phx-click="show_invite_modal">
+      <span class="hero-plus-mini mr-1 h-4 w-4" /> Invite member
+    </.button>
+  </:actions>
+</.header>
+
+<div class="mt-6">
+  <.card class="p-0 overflow-hidden">
+    <.table id="team-members" rows={@users} row_id={fn user -> "user-#{user.id}" end}>
+      <:col :let={user} label="Email">
+        <div>
+          <span class="font-medium">{user.email}</span>
+          <span :if={user.id == @current_user.id} class="ml-1 text-xs text-[hsl(var(--muted-foreground))]">(you)</span>
+        </div>
+      </:col>
+      <:col :let={user} label="Role">
+        <form phx-change="update_role">
+          <input type="hidden" name="user-id" value={user.id} />
+          <select
+            name="role"
+            class="rounded-md border border-[hsl(var(--input))] bg-[hsl(var(--background))] px-2 py-1 text-sm"
+            disabled={user.id == @current_user.id}
+          >
+            <option value="admin" selected={user.role == "admin"}>Admin</option>
+            <option value="member" selected={user.role == "member"}>Member</option>
+            <option value="viewer" selected={user.role == "viewer"}>Viewer</option>
+          </select>
+        </form>
+      </:col>
+      <:col :let={user} label="Status">
+        <.badge variant={if(user.status == "active", do: "success", else: "secondary")}>
+          {user.status}
+        </.badge>
+      </:col>
+      <:col :let={user} label="Joined">
+        {Calendar.strftime(user.inserted_at, "%b %d, %Y")}
+      </:col>
+      <:col :let={user} label="" class="text-right">
+        <.button
+          :if={user.id != @current_user.id}
+          variant="ghost"
+          phx-click="confirm_remove"
+          phx-value-id={user.id}
+          class="text-xs"
+        >
+          <span class="hero-trash-mini h-4 w-4 text-[hsl(var(--destructive))]" />
+        </.button>
+      </:col>
+    </.table>
+
+    <div :if={@users == []} class="px-4 py-12 text-center text-sm text-[hsl(var(--muted-foreground))]">
+      No team members found.
+    </div>
+  </.card>
+</div>
+
+<!-- Invite Modal -->
+<.modal :if={@show_invite_modal} id="invite-modal" show on_cancel={JS.push("close_invite_modal")}>
+  <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Invite Team Member</h3>
+  <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+    Send an invitation to join your organization
+  </p>
+
+  <div :if={@invite_error} class="mt-2 alert alert-error">{@invite_error}</div>
+
+  <form phx-submit="invite_user" class="mt-4 space-y-4">
+    <.input name="email" type="email" label="Email address" value="" required placeholder="teammate@example.com" />
+    <.input name="role" type="select" label="Role" value="member" options={[{"Admin", "admin"}, {"Member", "member"}, {"Viewer", "viewer"}]} />
+    <.button type="submit" class="w-full">Send invitation</.button>
+  </form>
+</.modal>
+
+<!-- Remove Confirmation Modal -->
+<.modal :if={@show_remove_modal} id="remove-modal" show on_cancel={JS.push("close_remove_modal")}>
+  <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Remove Team Member</h3>
+  <p class="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
+    Are you sure you want to remove <strong>{@remove_user && @remove_user.email}</strong> from your organization?
+  </p>
+  <:actions>
+    <.button variant="ghost" phx-click="close_remove_modal">Cancel</.button>
+    <.button variant="destructive" phx-click="remove_user">Remove</.button>
+  </:actions>
+</.modal>

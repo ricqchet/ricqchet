@@ -1,0 +1,78 @@
+<.header>
+  Applications
+  <:subtitle>Manage your webhook applications</:subtitle>
+  <:actions>
+    <.button phx-click="show_create_modal">
+      <span class="hero-plus-mini mr-1 h-4 w-4" /> New application
+    </.button>
+  </:actions>
+</.header>
+
+<div class="mt-6">
+  <.card class="p-0 overflow-hidden">
+    <.table id="applications" rows={@applications} row_id={fn app -> "app-#{app.id}" end}>
+      <:col :let={app} label="Name">
+        <.link navigate={~p"/applications/#{app.id}"} class="font-medium text-[hsl(var(--primary))] hover:underline">
+          {app.name}
+        </.link>
+      </:col>
+      <:col :let={app} label="Status">
+        <.badge variant={if(app.status == "active", do: "success", else: "secondary")}>
+          {app.status}
+        </.badge>
+      </:col>
+      <:col :let={app} label="Created">
+        {Calendar.strftime(app.inserted_at, "%b %d, %Y")}
+      </:col>
+      <:col :let={app} label="" class="text-right">
+        <.button variant="ghost" phx-click="confirm_delete" phx-value-id={app.id} class="text-xs">
+          <span class="hero-trash-mini h-4 w-4 text-[hsl(var(--destructive))]" />
+        </.button>
+      </:col>
+    </.table>
+
+    <div :if={@applications == []} class="px-4 py-12 text-center text-sm text-[hsl(var(--muted-foreground))]">
+      No applications yet. Create one to get started.
+    </div>
+  </.card>
+</div>
+
+<!-- Create Application Modal -->
+<.modal :if={@show_create_modal} id="create-app-modal" show on_cancel={JS.push("close_create_modal")}>
+  <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">
+    {if @created_api_key, do: "Application Created", else: "New Application"}
+  </h3>
+
+  <%= if @created_api_key do %>
+    <div class="mt-4 space-y-4">
+      <p class="text-sm text-[hsl(var(--muted-foreground))]">
+        Your application has been created. Here is your API key. Copy it now — you won't be able to see it again.
+      </p>
+      <div class="rounded-md bg-[hsl(var(--muted))] p-3 font-mono text-sm break-all">
+        {@created_api_key}
+      </div>
+      <.button phx-click="close_create_modal" class="w-full">Done</.button>
+    </div>
+  <% else %>
+    <div :if={@create_error} class="mt-2 alert alert-error">{@create_error}</div>
+
+    <form phx-submit="create_application" class="mt-4 space-y-4">
+      <.input name="name" type="text" label="Name" value="" required placeholder="My Application" />
+      <.input name="description" type="textarea" label="Description" value="" placeholder="Optional description" />
+      <.button type="submit" class="w-full">Create application</.button>
+    </form>
+  <% end %>
+</.modal>
+
+<!-- Delete Confirmation Modal -->
+<.modal :if={@show_delete_modal} id="delete-app-modal" show on_cancel={JS.push("close_delete_modal")}>
+  <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Delete Application</h3>
+  <p class="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
+    Are you sure you want to delete <strong>{@delete_app && @delete_app.name}</strong>?
+    This will revoke all API keys and cannot be undone.
+  </p>
+  <:actions>
+    <.button variant="ghost" phx-click="close_delete_modal">Cancel</.button>
+    <.button variant="destructive" phx-click="delete_application">Delete</.button>
+  </:actions>
+</.modal>

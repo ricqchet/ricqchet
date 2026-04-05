@@ -1,0 +1,75 @@
+<div class="flex h-screen overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="hidden md:flex md:flex-col w-64 border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-background))]">
+    <!-- Logo -->
+    <div class="flex items-center gap-2 px-6 py-5 border-b border-[hsl(var(--sidebar-border))]">
+      <span class="hero-rocket-launch-solid h-6 w-6 text-[hsl(var(--sidebar-primary))]" />
+      <span class="text-lg font-bold text-[hsl(var(--sidebar-foreground))]">Ricqchet</span>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="flex-1 px-3 py-4 space-y-1">
+      <.sidebar_link path={~p"/dashboard"} icon="hero-chart-bar-square" label="Dashboard" current_path={@current_path} />
+      <.sidebar_link path={~p"/applications"} icon="hero-cube" label="Applications" current_path={@current_path} />
+      <.sidebar_link path={~p"/team"} icon="hero-users" label="Team" current_path={@current_path} />
+      <.sidebar_link path={~p"/settings"} icon="hero-cog-6-tooth" label="Settings" current_path={@current_path} />
+    </nav>
+  </aside>
+
+  <!-- Main content area -->
+  <div class="flex flex-1 flex-col overflow-hidden">
+    <!-- Header -->
+    <header class="flex items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(var(--background))] px-6 py-3">
+      <!-- Mobile menu button -->
+      <button
+        class="md:hidden p-2 rounded-md hover:bg-[hsl(var(--accent))]"
+        phx-click={JS.toggle(to: "#mobile-sidebar")}
+      >
+        <span class="hero-bars-3 h-5 w-5" />
+      </button>
+
+      <div class="flex-1" />
+
+      <!-- Theme toggle -->
+      <button id="theme-toggle" phx-hook="ThemeToggle" class="p-2 rounded-md hover:bg-[hsl(var(--accent))] mr-2">
+        <span class="hero-sun h-5 w-5 dark:hidden" />
+        <span class="hero-moon hidden h-5 w-5 dark:block" />
+      </button>
+
+      <!-- User menu -->
+      <div class="flex items-center gap-3">
+        <span :if={@current_user} class="text-sm text-[hsl(var(--muted-foreground))]">
+          {@current_user.email}
+        </span>
+        <.link href={~p"/session"} method="delete" class="text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+          Log out
+        </.link>
+      </div>
+    </header>
+
+    <!-- Flash messages -->
+    <.flash_group flash={@flash} />
+
+    <!-- Page content -->
+    <main class="flex-1 overflow-y-auto p-6">
+      {@inner_content}
+    </main>
+  </div>
+</div>
+
+<!-- Mobile sidebar overlay -->
+<div id="mobile-sidebar" class="fixed inset-0 z-50 hidden md:hidden">
+  <div class="absolute inset-0 bg-black/50" phx-click={JS.toggle(to: "#mobile-sidebar")} />
+  <aside class="absolute left-0 top-0 bottom-0 w-64 bg-[hsl(var(--sidebar-background))] border-r border-[hsl(var(--sidebar-border))]">
+    <div class="flex items-center gap-2 px-6 py-5 border-b border-[hsl(var(--sidebar-border))]">
+      <span class="hero-rocket-launch-solid h-6 w-6 text-[hsl(var(--sidebar-primary))]" />
+      <span class="text-lg font-bold text-[hsl(var(--sidebar-foreground))]">Ricqchet</span>
+    </div>
+    <nav class="px-3 py-4 space-y-1">
+      <.sidebar_link path={~p"/dashboard"} icon="hero-chart-bar-square" label="Dashboard" current_path={@current_path} />
+      <.sidebar_link path={~p"/applications"} icon="hero-cube" label="Applications" current_path={@current_path} />
+      <.sidebar_link path={~p"/team"} icon="hero-users" label="Team" current_path={@current_path} />
+      <.sidebar_link path={~p"/settings"} icon="hero-cog-6-tooth" label="Settings" current_path={@current_path} />
+    </nav>
+  </aside>
+</div>

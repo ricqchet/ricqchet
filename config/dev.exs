@@ -24,7 +24,16 @@ config :ricqchet, RicqchetWeb.Endpoint,
   code_reloader: true,
   debug_errors: true,
   secret_key_base: "AizPHlFtYaUBULcC4xfaGsIk4HlPlsbZMHG4Zv9xZAE+fXiOQ/Cu7WwBTHk77eAv",
-  watchers: []
+  watchers: [
+    esbuild: {Esbuild, :install_and_run, [:ricqchet, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:ricqchet, ~w(--watch)]}
+  ],
+  live_reload: [
+    patterns: [
+      ~r"priv/static/(?!uploads/).*(js|css|png|jpeg|jpg|gif|svg)$",
+      ~r"lib/ricqchet_web/(controllers|live|components)/.*(ex|heex)$"
+    ]
+  ]
 
 # ## SSL Support
 #
