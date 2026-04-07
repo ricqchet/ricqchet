@@ -18,6 +18,12 @@ priv/plts/
 *.swo
 .DS_Store
 
+# Generated asset bundles (built by esbuild/tailwind)
+/priv/static/assets/
+
+# Node/npm (if assets require npm packages)
+/assets/node_modules/
+
 # Temporary files
 tmp/
 

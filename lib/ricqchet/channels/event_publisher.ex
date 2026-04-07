@@ -86,6 +86,19 @@ defmodule Ricqchet.Channels.EventPublisher do
     topic = "channels:app:#{application_id}:#{channel}"
     PubSub.broadcast(@pubsub, topic, {:channel_event, payload})
 
+    # Broadcast a lightweight summary to the tenant-level topic for the dashboard feed
+    if tenant_id do
+      PubSub.broadcast(@pubsub, "channels:tenant:#{tenant_id}", {
+        :channel_activity,
+        %{
+          application_id: application_id,
+          channel: channel,
+          event: event_name,
+          timestamp: DateTime.utc_now()
+        }
+      })
+    end
+
     :telemetry.execute(
       [:ricqchet, :channels, :event, :published],
       %{data_size: byte_size(encoded_data)},

@@ -1,0 +1,68 @@
+<.header>
+  Settings
+  <:subtitle>Manage your organization and account settings</:subtitle>
+</.header>
+
+<div class="mt-8 space-y-8 max-w-2xl">
+  <!-- Organization Settings -->
+  <.card>
+    <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Organization</h3>
+    <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+      Update your organization name
+    </p>
+
+    <form action={~p"/settings/tenant"} method="post" class="mt-4 space-y-4">
+      <input type="hidden" name="_method" value="put" />
+      <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+
+      <.input
+        name="name"
+        type="text"
+        label="Organization name"
+        value={@tenant.name}
+        required
+      />
+
+      <.button type="submit">
+        Save changes
+      </.button>
+    </form>
+  </.card>
+
+  <!-- Change Password -->
+  <.card>
+    <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Change password</h3>
+    <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+      Update your account password
+    </p>
+
+    <form action={~p"/settings/password"} method="post" class="mt-4 space-y-4">
+      <input type="hidden" name="_method" value="put" />
+      <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+
+      <.input
+        name="current_password"
+        type="password"
+        label="Current password"
+        value=""
+        required
+        autocomplete="current-password"
+      />
+
+      <.input
+        name="new_password"
+        type="password"
+        label="New password"
+        value=""
+        required
+        minlength="12"
+        placeholder="At least 12 characters"
+        autocomplete="new-password"
+      />
+
+      <.button type="submit">
+        Change password
+      </.button>
+    </form>
+  </.card>
+</div>

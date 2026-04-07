@@ -16,7 +16,7 @@ config :ricqchet, RicqchetWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
-    formats: [json: RicqchetWeb.ErrorJSON],
+    formats: [html: RicqchetWeb.ErrorHTML, json: RicqchetWeb.ErrorJSON],
     layout: false
   ],
   pubsub_server: Ricqchet.PubSub,
@@ -89,6 +89,28 @@ config :logger, :default_formatter,
     :event,
     :url,
     :message_id
+  ]
+
+# Configure esbuild (the version is required)
+config :esbuild,
+  version: "0.17.11",
+  ricqchet: [
+    args:
+      ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
+    cd: Path.expand("../assets", __DIR__),
+    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
+  ]
+
+# Configure tailwind (the version is required)
+config :tailwind,
+  version: "3.4.3",
+  ricqchet: [
+    args: ~w(
+      --config=tailwind.config.js
+      --input=css/app.css
+      --output=../priv/static/assets/app.css
+    ),
+    cd: Path.expand("../assets", __DIR__)
   ]
 
 # Use Jason for JSON parsing in Phoenix

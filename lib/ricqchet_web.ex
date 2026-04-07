@@ -7,6 +7,7 @@ defmodule RicqchetWeb do
 
       use RicqchetWeb, :controller
       use RicqchetWeb, :html
+      use RicqchetWeb, :live_view
 
   The definitions below will be executed for every controller,
   component, etc, so keep them short and clean, focused
@@ -26,6 +27,7 @@ defmodule RicqchetWeb do
       # Import common connection and controller functions to use in pipelines
       import Plug.Conn
       import Phoenix.Controller
+      import Phoenix.LiveView.Router
     end
   end
 
@@ -42,6 +44,48 @@ defmodule RicqchetWeb do
       use Gettext, backend: RicqchetWeb.Gettext
 
       import Plug.Conn
+
+      unquote(verified_routes())
+    end
+  end
+
+  def live_view do
+    quote do
+      use Phoenix.LiveView,
+        layout: {RicqchetWeb.Layouts, :app}
+
+      unquote(html_helpers())
+    end
+  end
+
+  def live_component do
+    quote do
+      use Phoenix.LiveComponent
+
+      unquote(html_helpers())
+    end
+  end
+
+  def html do
+    quote do
+      use Phoenix.Component
+
+      import Phoenix.Controller,
+        only: [get_csrf_token: 0, view_module: 1, view_template: 1]
+
+      unquote(html_helpers())
+    end
+  end
+
+  defp html_helpers do
+    quote do
+      import Phoenix.HTML
+
+      import RicqchetWeb.CoreComponents
+
+      alias Phoenix.LiveView.JS
+
+      use Gettext, backend: RicqchetWeb.Gettext
 
       unquote(verified_routes())
     end
