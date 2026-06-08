@@ -27,6 +27,7 @@ defmodule RicqchetWeb.ApiKeyJSON do
       api_key: api_key.api_key,
       prefix: api_key.api_key_prefix,
       status: api_key.status,
+      scope: api_key.scope,
       expires_at: api_key.expires_at,
       created_at: api_key.inserted_at
     }
@@ -38,6 +39,7 @@ defmodule RicqchetWeb.ApiKeyJSON do
       name: api_key.name,
       prefix: api_key.api_key_prefix,
       status: api_key.status,
+      scope: api_key.scope,
       revoked: true,
       revoked_at: api_key.updated_at
     }
@@ -49,7 +51,8 @@ defmodule RicqchetWeb.ApiKeyJSON do
         id: old_key.id,
         name: old_key.name,
         prefix: old_key.api_key_prefix,
-        status: old_key.status
+        status: old_key.status,
+        scope: old_key.scope
       },
       new_api_key: %{
         id: new_key.id,
@@ -57,6 +60,7 @@ defmodule RicqchetWeb.ApiKeyJSON do
         api_key: new_key.api_key,
         prefix: new_key.api_key_prefix,
         status: new_key.status,
+        scope: new_key.scope,
         expires_at: new_key.expires_at,
         created_at: new_key.inserted_at
       }
@@ -69,6 +73,7 @@ defmodule RicqchetWeb.ApiKeyJSON do
       name: key.name,
       prefix: key.api_key_prefix,
       status: key.status,
+      scope: key.scope,
       last_used_at: key.last_used_at,
       expires_at: key.expires_at,
       created_at: key.inserted_at

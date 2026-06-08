@@ -43,6 +43,16 @@ socket.channel("presence-lobby").join()
 socket.channel("orders.us.west").join()
 ```
 
+> **Use a browser-safe `subscribe` key here.** Browser clients should connect
+> with a `subscribe`-scoped API key, not a full `relay` key. A `subscribe` key
+> can only use this WebSocket — it is rejected on every REST endpoint — so it is
+> safe to embed in front-end code. A `relay` key leaks your publish + signing
+> secret surface if it reaches the browser. See
+> [Authentication → API Key Scopes](authentication.md#api-key-scopes).
+>
+> `user_id`/`user_info` are client-supplied and **unverified**. Your auth
+> endpoint is what establishes identity for private/presence channels (below).
+
 ## Channel Types
 
 Channel type is determined by the name prefix:
@@ -112,6 +122,22 @@ Private and presence channels require an auth endpoint configured on your applic
 
 Return `200` to allow access or any other status to deny it.
 
+### Binding verified identity
+
+Because the connecting client controls `user_id`/`user_info`, your auth endpoint
+is the authority on identity. Include a `user_id` (and optionally a `user_info`
+object) in your `200` response body and Ricqchet will **override** the
+client-supplied values with yours for presence and client-event attribution:
+
+```json
+{ "user_id": "user-123", "user_info": { "name": "Ada", "role": "member" } }
+```
+
+If you omit identity from the response, the unverified client-supplied values are
+used as-is. To prevent impersonation by a holder of your (public) `subscribe`
+key, authenticate the session in your auth endpoint and always return the
+authoritative `user_id`.
+
 ## Presence Channels
 
 Presence channels track connected members. When a client joins a `presence-` channel:
@@ -132,7 +158,8 @@ curl "http://localhost:4000/v1/channels/presence-room/members" \
 Connected clients on private and presence channels can send events directly to other clients:
 
 - Event names must start with `client-`
-- Rate limited per user (configurable via namespace, default: 10/second)
+- Rate limited **per connection** (configurable via namespace, default: 10/second). Keying on the connection rather than the client-supplied `user_id` prevents a spoofed/rotated `user_id` from inflating the limit.
+- Attributed to the verified `user_id` when your auth endpoint binds identity (see above)
 - Not persisted to history
 
 ## Event History
@@ -201,7 +228,12 @@ Webhooks are signed with your tenant's signing secret using HMAC-SHA256.
 
 ### Connection Limits
 
-Configure `max_connections_per_app` to limit concurrent WebSocket connections per application.
+Configure `max_connections_per_app` to limit concurrent WebSocket connections
+per application (default: `10_000`, override with the
+`CHANNELS_MAX_CONNECTIONS_PER_APP` env var — see
+[Configuration → Channels](configuration.md#channels-real-time)). Because
+`subscribe` keys are distributed to browsers (public by design), this cap is the
+backstop against connection flooding — keep it bounded.
 
 ### Disconnect Users
 

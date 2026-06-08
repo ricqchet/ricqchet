@@ -133,7 +133,10 @@ defmodule Ricqchet.ApiKeys do
     Repo.transaction(fn ->
       {:ok, revoked_key} = revoke_api_key(old_api_key)
 
-      case create_api_key(application, %{name: old_api_key.name}) do
+      # Preserve the scope on rotation. Without this, rotating a browser-safe
+      # `subscribe` key would mint a full `relay` key that then gets distributed
+      # to browsers — a silent privilege escalation.
+      case create_api_key(application, %{name: old_api_key.name, scope: old_api_key.scope}) do
         {:ok, new_api_key} -> {revoked_key, new_api_key}
         {:error, changeset} -> Repo.rollback(changeset)
       end

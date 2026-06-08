@@ -136,6 +136,21 @@ config :ricqchet, flow_control_reconciliation_interval_ms: false
 
 Lower intervals provide faster drift correction at the cost of more database queries. The default of 10 seconds balances accuracy with load.
 
+## Channels (real-time)
+
+```elixir
+# config/config.exs
+config :ricqchet, :channels,
+  max_connections_per_app: 10_000  # default
+```
+
+`max_connections_per_app` bounds concurrent WebSocket connections per
+application. A **non-nil** value is required: browser-safe
+[`subscribe`-scoped API keys](authentication.md#api-key-scopes) are public by
+design, so an unbounded cap would let anyone open unlimited sockets. Override per
+deploy with the `CHANNELS_MAX_CONNECTIONS_PER_APP` environment variable
+(`config/runtime.exs`).
+
 ## Database
 
 ### PostgreSQL Connection
@@ -223,6 +238,7 @@ Credentials (cookies, authorization headers) are supported for authenticated req
 | `ADMIN_EMAIL` | Email for the initial admin (first run only) | admin@localhost |
 | `ADMIN_PASSWORD` | Password for the initial admin (first run only) | generated |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | http://localhost:3000, http://localhost:4000 |
+| `CHANNELS_MAX_CONNECTIONS_PER_APP` | Max concurrent channel WebSocket connections per application | 10000 |
 
 ## Development Dashboard
 

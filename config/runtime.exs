@@ -23,6 +23,13 @@ end
 config :ricqchet, RicqchetWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+# Bound concurrent channel WebSocket connections per application. Browser-safe
+# `subscribe` keys are public, so this cap is the backstop against connection
+# flooding. Tune to your instance's capacity.
+if max_conns = System.get_env("CHANNELS_MAX_CONNECTIONS_PER_APP") do
+  config :ricqchet, :channels, max_connections_per_app: String.to_integer(max_conns)
+end
+
 # Initial admin bootstrap (self-hosted).
 #
 # On first run, `Ricqchet.Release.seed/0` (and `mix ecto.setup`) creates a single

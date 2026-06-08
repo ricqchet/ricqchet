@@ -51,6 +51,14 @@ config :ricqchet,
   jwt_access_token_ttl: 15 * 60,
   jwt_refresh_token_ttl: 7 * 24 * 60 * 60
 
+# Real-time channels configuration.
+#
+# `max_connections_per_app` bounds concurrent WebSocket connections per
+# application. A non-nil default is REQUIRED: browser-safe `subscribe` API keys
+# are public by design, so an unbounded cap would let anyone open unlimited
+# sockets. Override per deploy via CHANNELS_MAX_CONNECTIONS_PER_APP (runtime.exs).
+config :ricqchet, :channels, max_connections_per_app: 10_000
+
 # CORS configuration
 # In production, set CORS_ALLOWED_ORIGINS env var (comma-separated list)
 config :ricqchet, :cors,

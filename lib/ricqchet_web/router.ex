@@ -25,6 +25,7 @@ defmodule RicqchetWeb.Router do
 
   pipeline :authenticated do
     plug RicqchetWeb.Plugs.Authenticate
+    plug RicqchetWeb.Plugs.RequireScope, scope: :relay
     plug RicqchetWeb.Plugs.RateLimiter
   end
 

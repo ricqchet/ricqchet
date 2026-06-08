@@ -18,7 +18,7 @@ defmodule RicqchetWeb.Schemas.ApiKeyRotatedResponse do
     properties: %{
       old_api_key: %Schema{
         type: :object,
-        required: [:id, :name, :prefix, :status],
+        required: [:id, :name, :prefix, :status, :scope],
         properties: %{
           id: %Schema{
             type: :string,
@@ -37,13 +37,18 @@ defmodule RicqchetWeb.Schemas.ApiKeyRotatedResponse do
             type: :string,
             enum: ["revoked"],
             description: "Status of the old key (always 'revoked')"
+          },
+          scope: %Schema{
+            type: :string,
+            enum: ["relay", "subscribe"],
+            description: "Permission scope of the revoked key"
           }
         },
         description: "Information about the revoked key"
       },
       new_api_key: %Schema{
         type: :object,
-        required: [:id, :name, :api_key, :prefix, :status, :created_at],
+        required: [:id, :name, :api_key, :prefix, :status, :scope, :created_at],
         properties: %{
           id: %Schema{
             type: :string,
@@ -67,6 +72,11 @@ defmodule RicqchetWeb.Schemas.ApiKeyRotatedResponse do
             enum: ["active"],
             description: "Status of the new key"
           },
+          scope: %Schema{
+            type: :string,
+            enum: ["relay", "subscribe"],
+            description: "Permission scope of the new key (preserved from the rotated key)"
+          },
           expires_at: %Schema{
             type: :string,
             format: :"date-time",
@@ -87,7 +97,8 @@ defmodule RicqchetWeb.Schemas.ApiKeyRotatedResponse do
         id: "550e8400-e29b-41d4-a716-446655440000",
         name: "Production Key",
         prefix: "rq_live_",
-        status: "revoked"
+        status: "revoked",
+        scope: "relay"
       },
       new_api_key: %{
         id: "660e8400-e29b-41d4-a716-446655440001",
@@ -95,6 +106,7 @@ defmodule RicqchetWeb.Schemas.ApiKeyRotatedResponse do
         api_key: "rq_live_xyz789abc012def345ghi678jkl901mno234pqr567",
         prefix: "rq_live_",
         status: "active",
+        scope: "relay",
         expires_at: nil,
         created_at: "2026-01-31T15:30:00Z"
       }

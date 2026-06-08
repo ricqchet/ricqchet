@@ -16,7 +16,7 @@ defmodule RicqchetWeb.Schemas.ApiKeyCreatedResponse do
     Store it securely - it cannot be retrieved again.
     """,
     type: :object,
-    required: [:id, :name, :api_key, :prefix, :status, :created_at],
+    required: [:id, :name, :api_key, :prefix, :status, :scope, :created_at],
     properties: %{
       id: %Schema{
         type: :string,
@@ -40,6 +40,11 @@ defmodule RicqchetWeb.Schemas.ApiKeyCreatedResponse do
         enum: ["active"],
         description: "Status of the key (always 'active' on creation)"
       },
+      scope: %Schema{
+        type: :string,
+        enum: ["relay", "subscribe"],
+        description: "Permission scope of the key (`relay` or `subscribe`)"
+      },
       expires_at: %Schema{
         type: :string,
         format: :"date-time",
@@ -58,6 +63,7 @@ defmodule RicqchetWeb.Schemas.ApiKeyCreatedResponse do
       api_key: "rq_live_abc123def456ghi789jkl012mno345pqr678stu901",
       prefix: "rq_live_",
       status: "active",
+      scope: "relay",
       expires_at: nil,
       created_at: "2026-01-15T10:00:00Z"
     }

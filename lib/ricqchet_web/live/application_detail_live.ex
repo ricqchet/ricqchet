@@ -2,6 +2,7 @@ defmodule RicqchetWeb.ApplicationDetailLive do
   use RicqchetWeb, :live_view
 
   alias Ricqchet.ApiKeys
+  alias Ricqchet.ApiKeys.Scope
   alias Ricqchet.Applications
   alias Ricqchet.Authorization
 
@@ -48,9 +49,9 @@ defmodule RicqchetWeb.ApplicationDetailLive do
     {:noreply, assign(socket, show_create_key_modal: false, created_key_value: nil)}
   end
 
-  def handle_event("create_api_key", %{"name" => name}, socket) do
+  def handle_event("create_api_key", %{"name" => name} = params, socket) do
     with :ok <- require_editor(socket) do
-      do_create_api_key(socket, name)
+      do_create_api_key(socket, name, Map.get(params, "scope", Scope.default()))
     end
   end
 
@@ -99,8 +100,8 @@ defmodule RicqchetWeb.ApplicationDetailLive do
     end
   end
 
-  defp do_create_api_key(socket, name) do
-    case ApiKeys.create_api_key(socket.assigns.application, %{"name" => name}) do
+  defp do_create_api_key(socket, name, scope) do
+    case ApiKeys.create_api_key(socket.assigns.application, %{"name" => name, "scope" => scope}) do
       {:ok, api_key} ->
         api_keys = ApiKeys.list_api_keys_for_application(socket.assigns.application)
 

@@ -105,8 +105,9 @@ defmodule RicqchetWeb.ApiKeyController do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    # Only allow documented request-body fields to prevent status override
-    attrs = Map.take(params, ["name", "expires_at"])
+    # Only allow documented request-body fields to prevent status override.
+    # `scope` is bounded by the changeset (relay/subscribe); anything else 422s.
+    attrs = Map.take(params, ["name", "expires_at", "scope"])
 
     with :ok <- Authorization.authorize(user, :editor),
          {:ok, application} <- get_application_or_error(tenant, application_id),

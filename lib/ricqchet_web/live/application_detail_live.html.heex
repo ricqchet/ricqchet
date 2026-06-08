@@ -64,6 +64,15 @@
       <:col :let={key} label="Key">
         <code class="text-xs text-[hsl(var(--muted-foreground))]">{format_key_prefix(key)}</code>
       </:col>
+      <:col :let={key} label="Scope">
+        <span class={[
+          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+          key.scope == "subscribe" && "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]",
+          key.scope != "subscribe" && "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]"
+        ]}>
+          {key.scope}
+        </span>
+      </:col>
       <:col :let={key} label="Created">
         {Calendar.strftime(key.inserted_at, "%b %d, %Y")}
       </:col>
@@ -104,6 +113,21 @@
   <% else %>
     <form phx-submit="create_api_key" class="mt-4 space-y-4">
       <.input name="name" type="text" label="Key name" value="" required placeholder="Production" />
+      <.input
+        name="scope"
+        type="select"
+        label="Scope"
+        value="relay"
+        options={[
+          {"Relay — full server-side access", "relay"},
+          {"Subscribe — browser-safe, channels only", "subscribe"}
+        ]}
+      />
+      <p class="text-xs text-[hsl(var(--muted-foreground))]">
+        Use a <strong>subscribe</strong> key for browser real-time clients: it can only
+        subscribe to channels and is rejected on every REST endpoint, so it is safe to embed
+        in front-end code.
+      </p>
       <.button type="submit" class="w-full">Create API key</.button>
     </form>
   <% end %>

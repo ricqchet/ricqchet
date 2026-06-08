@@ -36,6 +36,7 @@ defmodule RicqchetWeb.Schemas.ApiKeyList do
           name: "Production Key",
           prefix: "rq_live_",
           status: "active",
+          scope: "relay",
           last_used_at: "2026-01-31T15:30:00Z",
           expires_at: nil,
           created_at: "2026-01-15T10:00:00Z"
