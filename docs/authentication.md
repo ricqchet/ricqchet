@@ -7,33 +7,55 @@ Ricqchet supports two authentication methods:
 
 ## JWT Authentication (Management API)
 
-User accounts authenticate via JWT tokens to access management endpoints like user profile, password changes, and (future) application management.
+User accounts authenticate via JWT tokens to access management endpoints like user profile, password changes, and application, API key, and user management.
 
-### Registration
+### First-run admin
 
-Create a new account with an organization (tenant):
+Ricqchet is self-hosted and single-organization. There is **no public sign-up** —
+the first admin user is created automatically on first run (see
+[Configuration → Initial admin](configuration.md#initial-admin)). Sign in with the
+printed credentials and change the password immediately.
+
+### User roles & permissions
+
+Every user has one of three roles:
+
+| Role     | View dashboard & data | Manage apps, API keys, channels | Manage users & org settings |
+| -------- | :-------------------: | :-----------------------------: | :-------------------------: |
+| `admin`  |           ✓           |                ✓                |              ✓              |
+| `member` |           ✓           |                ✓                |                             |
+| `viewer` |           ✓           |                                 |                             |
+
+Mutating management endpoints return `403 Forbidden` when the user's role is
+insufficient. Role checks apply to the JWT-authenticated management API and the
+dashboard; the API-key relay endpoints (publish, channels) are unaffected.
+
+### Creating users (admin only)
+
+Admins add users directly — no email is required. Provide a `password`, or omit it
+to have a secure one generated and returned **once** in the response.
 
 ```bash
-curl -X POST "http://localhost:4000/v1/auth/register" \
+curl -X POST "http://localhost:4000/v1/tenant/users" \
+  -H "Authorization: Bearer <admin_access_token>" \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "secure_password_123",
-    "tenant_name": "My Organization"
-  }'
+  -d '{"email": "teammate@example.com", "role": "member"}'
 ```
 
-A verification email will be sent. Users must verify their email before logging in.
+Response (201 Created) — the one-time `password` is present only when generated:
 
-### Email Verification
-
-Verify email using the token from the verification email:
-
-```bash
-curl -X POST "http://localhost:4000/v1/auth/verify-email" \
-  -H "Content-Type: application/json" \
-  -d '{"token": "verification_token_from_email"}'
+```json
+{
+  "id": "...",
+  "email": "teammate@example.com",
+  "role": "member",
+  "status": "active",
+  "password": "generated-one-time-password"
+}
 ```
+
+Share the credentials securely; the generated password cannot be retrieved later.
+Users can also be managed from the **Team** page in the dashboard.
 
 ### Login
 
@@ -140,41 +162,21 @@ Tenant (Organization)
 
 ## Setup
 
-### 1. Create a Tenant
+A single default organization (tenant) is created on first run, so you don't
+create one yourself. Sign in as the [first-run admin](configuration.md#initial-admin),
+then create applications and API keys from the dashboard or the API.
 
-```elixir
-# In iex -S mix
-alias Ricqchet.Tenants
+### 1. Create an Application
 
-{:ok, tenant} = Tenants.create_tenant(%{name: "My Organization"})
-```
+Create an application from the dashboard (**Applications → New application**) or via
+the API (see [Applications](applications.md)). Creating applications requires a
+member or admin role.
 
-### 2. Create an Application
+### 2. Create an API Key
 
-Applications can be created via the API (see [Applications](applications.md)) or programmatically:
-
-```elixir
-alias Ricqchet.Applications
-
-{:ok, application} = Applications.create_application(tenant, %{
-  name: "Production API",
-  description: "Main production service"
-})
-```
-
-### 3. Create an API Key
-
-```elixir
-alias Ricqchet.ApiKeys
-
-{:ok, api_key} = ApiKeys.create_api_key(application, %{name: "Production Key"})
-
-# IMPORTANT: Store this value securely - it's only shown once!
-# Never log API keys in production. Store in a secrets manager or env variable.
-your_secret_storage.store("api_key", api_key.api_key)
-```
-
-The plaintext API key is only available immediately after creation. Store it securely.
+Create a key from the application's detail page in the dashboard, or via the API
+(`POST /v1/applications/:id/api-keys`, see below). The plaintext key is only shown
+once — store it securely (a secrets manager or environment variable) and never log it.
 
 ## Using API Keys
 
@@ -189,7 +191,7 @@ curl -X POST "http://localhost:4000/v1/publish/https://example.com/webhook" \
 
 ## API Key Management
 
-API keys can be managed via REST API endpoints. Listing keys is available to any authenticated tenant member, while creating, revoking, and rotating keys require JWT authentication with an admin role.
+API keys can be managed via REST API endpoints. Listing keys is available to any authenticated user, while creating, revoking, and rotating keys require JWT authentication with a member or admin role.
 
 ### API Key Lifecycle
 
@@ -207,7 +209,7 @@ stateDiagram-v2
 
 `POST /v1/applications/:application_id/api-keys`
 
-**Requires admin role.**
+**Requires member or admin role.**
 
 ```bash
 curl -X POST "http://localhost:4000/v1/applications/{app_id}/api-keys" \
@@ -264,7 +266,7 @@ Response (200 OK):
 
 `DELETE /v1/api-keys/:id`
 
-**Requires admin role.**
+**Requires member or admin role.**
 
 ```bash
 curl -X DELETE "http://localhost:4000/v1/api-keys/{key_id}" \
@@ -289,7 +291,7 @@ Response (200 OK):
 
 `POST /v1/api-keys/:id/rotate`
 
-**Requires admin role.**
+**Requires member or admin role.**
 
 Atomically revokes the old key and creates a new one with the same name.
 

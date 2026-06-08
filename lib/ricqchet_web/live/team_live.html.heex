@@ -2,8 +2,8 @@
   Team
   <:subtitle>Manage your team members</:subtitle>
   <:actions>
-    <.button phx-click="show_invite_modal">
-      <span class="hero-plus-mini mr-1 h-4 w-4" /> Invite member
+    <.button :if={can?(@current_user, :manage_users)} phx-click="show_add_modal">
+      <span class="hero-plus-mini mr-1 h-4 w-4" /> Add user
     </.button>
   </:actions>
 </.header>
@@ -18,7 +18,7 @@
         </div>
       </:col>
       <:col :let={user} label="Role">
-        <form phx-change="update_role">
+        <form :if={can?(@current_user, :manage_users)} phx-change="update_role">
           <input type="hidden" name="user-id" value={user.id} />
           <select
             name="role"
@@ -30,6 +30,7 @@
             <option value="viewer" selected={user.role == "viewer"}>Viewer</option>
           </select>
         </form>
+        <span :if={!can?(@current_user, :manage_users)} class="text-sm capitalize">{user.role}</span>
       </:col>
       <:col :let={user} label="Status">
         <.badge variant={if(user.status == "active", do: "success", else: "secondary")}>
@@ -41,7 +42,7 @@
       </:col>
       <:col :let={user} label="" class="text-right">
         <.button
-          :if={user.id != @current_user.id}
+          :if={can?(@current_user, :manage_users) && user.id != @current_user.id}
           variant="ghost"
           phx-click="confirm_remove"
           phx-value-id={user.id}
@@ -58,20 +59,51 @@
   </.card>
 </div>
 
-<!-- Invite Modal -->
-<.modal :if={@show_invite_modal} id="invite-modal" show on_cancel={JS.push("close_invite_modal")}>
-  <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Invite Team Member</h3>
-  <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-    Send an invitation to join your organization
-  </p>
+<!-- Add User Modal -->
+<.modal :if={@show_add_modal} id="add-user-modal" show on_cancel={JS.push("close_add_modal")}>
+  <div :if={@created_user_email}>
+    <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">User added</h3>
+    <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+      <strong>{@created_user_email}</strong> can now sign in.
+    </p>
 
-  <div :if={@invite_error} class="mt-2 alert alert-error">{@invite_error}</div>
+    <div :if={@created_user_password} class="mt-4">
+      <p class="text-sm text-[hsl(var(--muted-foreground))]">
+        Share this one-time password securely — it won't be shown again:
+      </p>
+      <code class="mt-2 block break-all rounded-md bg-[hsl(var(--muted))] px-3 py-2 font-mono text-sm">
+        {@created_user_password}
+      </code>
+    </div>
 
-  <form phx-submit="invite_user" class="mt-4 space-y-4">
-    <.input name="email" type="email" label="Email address" value="" required placeholder="teammate@example.com" />
-    <.input name="role" type="select" label="Role" value="member" options={[{"Admin", "admin"}, {"Member", "member"}, {"Viewer", "viewer"}]} />
-    <.button type="submit" class="w-full">Send invitation</.button>
-  </form>
+    <p :if={!@created_user_password} class="mt-4 text-sm text-[hsl(var(--muted-foreground))]">
+      They can sign in with the password you set.
+    </p>
+
+    <.button phx-click="close_add_modal" class="mt-4 w-full">Done</.button>
+  </div>
+
+  <div :if={!@created_user_email}>
+    <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Add Team Member</h3>
+    <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+      Create an account for someone in your organization
+    </p>
+
+    <div :if={@add_error} class="mt-2 alert alert-error">{@add_error}</div>
+
+    <form phx-submit="add_user" class="mt-4 space-y-4">
+      <.input name="email" type="email" label="Email address" value="" required placeholder="teammate@example.com" />
+      <.input name="role" type="select" label="Role" value="member" options={[{"Admin", "admin"}, {"Member", "member"}, {"Viewer", "viewer"}]} />
+      <.input
+        name="password"
+        type="password"
+        label="Password (optional)"
+        value=""
+        placeholder="Leave blank to auto-generate"
+      />
+      <.button type="submit" class="w-full">Add user</.button>
+    </form>
+  </div>
 </.modal>
 
 <!-- Remove Confirmation Modal -->

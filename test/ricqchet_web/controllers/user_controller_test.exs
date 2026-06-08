@@ -1,21 +1,16 @@
 defmodule RicqchetWeb.UserControllerTest do
   use RicqchetWeb.ConnCase, async: false
 
-  alias Ricqchet.Auth
-  alias Ricqchet.Auth.Token
-
   describe "GET /v1/users/me" do
     setup do
-      # Create and verify a user
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "profileuser@example.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Profile Org"
-        })
+      {:ok, %{user: user, tenant: _tenant}} =
+        create_tenant_and_user(
+          email: "profileuser@example.com",
+          password: "secure_password_123",
+          tenant_name: "Profile Org"
+        )
 
-      {:ok, user} = Auth.verify_email(token)
-      {:ok, access_token, _claims} = Token.generate_access_token(user)
+      access_token = access_token_for(user)
 
       %{user: user, access_token: access_token}
     end

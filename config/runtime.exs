@@ -23,6 +23,21 @@ end
 config :ricqchet, RicqchetWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+# Initial admin bootstrap (self-hosted).
+#
+# On first run, `Ricqchet.Release.seed/0` (and `mix ecto.setup`) creates a single
+# default tenant and one admin user. Configure that admin with:
+#
+#     ADMIN_EMAIL     the admin's email address (default: admin@localhost)
+#     ADMIN_PASSWORD  the admin's password; if unset, a secure password is
+#                     generated and printed once to the logs
+#
+# These are read at runtime by the bootstrap task, so no config is set here.
+# For OTP releases, run after deploy:
+#
+#     bin/ricqchet eval "Ricqchet.Release.migrate()"
+#     bin/ricqchet eval "Ricqchet.Release.seed()"
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

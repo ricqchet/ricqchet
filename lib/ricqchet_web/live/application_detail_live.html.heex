@@ -13,7 +13,7 @@
   <.card>
     <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Settings</h3>
 
-    <form phx-submit="update_application" class="mt-4 space-y-4">
+    <form :if={can?(@current_user, :write)} phx-submit="update_application" class="mt-4 space-y-4">
       <.input name="name" type="text" label="Name" value={@application.name} required />
       <.input name="description" type="textarea" label="Description" value={@application.description || ""} />
       <.input
@@ -26,6 +26,21 @@
 
       <.button type="submit">Save changes</.button>
     </form>
+
+    <dl :if={!can?(@current_user, :write)} class="mt-4 space-y-3 text-sm">
+      <div>
+        <dt class="text-[hsl(var(--muted-foreground))]">Name</dt>
+        <dd class="font-medium">{@application.name}</dd>
+      </div>
+      <div>
+        <dt class="text-[hsl(var(--muted-foreground))]">Description</dt>
+        <dd class="font-medium">{@application.description || "—"}</dd>
+      </div>
+      <div>
+        <dt class="text-[hsl(var(--muted-foreground))]">DLQ Destination URL</dt>
+        <dd class="font-medium">{Applications.get_dlq_destination(@application) || "—"}</dd>
+      </div>
+    </dl>
   </.card>
 
   <!-- API Keys -->
@@ -37,7 +52,7 @@
           Manage API keys for this application
         </p>
       </div>
-      <.button phx-click="show_create_key_modal" variant="secondary">
+      <.button :if={can?(@current_user, :write)} phx-click="show_create_key_modal" variant="secondary">
         <span class="hero-plus-mini mr-1 h-4 w-4" /> Create key
       </.button>
     </div>
@@ -53,7 +68,7 @@
         {Calendar.strftime(key.inserted_at, "%b %d, %Y")}
       </:col>
       <:col :let={key} label="" class="text-right">
-        <div class="flex items-center justify-end gap-2">
+        <div :if={can?(@current_user, :write)} class="flex items-center justify-end gap-2">
           <.button variant="ghost" phx-click="show_rotate_modal" phx-value-id={key.id} class="text-xs">
             <span class="hero-arrow-path-mini h-4 w-4" /> Rotate
           </.button>

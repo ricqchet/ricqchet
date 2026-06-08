@@ -115,43 +115,13 @@ defmodule RicqchetWeb.FallbackController do
     )
   end
 
-  def call(conn, {:error, :invalid_token}) do
-    conn
-    |> put_status(:bad_request)
-    |> put_view(json: RicqchetWeb.ErrorJSON)
-    |> render(:error,
-      error: "invalid_token",
-      message: "The invitation token is invalid"
-    )
-  end
-
-  def call(conn, {:error, :token_expired}) do
-    conn
-    |> put_status(:bad_request)
-    |> put_view(json: RicqchetWeb.ErrorJSON)
-    |> render(:error,
-      error: "token_expired",
-      message: "The invitation has expired"
-    )
-  end
-
-  def call(conn, {:error, :invitation_not_pending}) do
-    conn
-    |> put_status(:bad_request)
-    |> put_view(json: RicqchetWeb.ErrorJSON)
-    |> render(:error,
-      error: "invitation_not_pending",
-      message: "This invitation has already been used or revoked"
-    )
-  end
-
   def call(conn, {:error, :user_already_exists}) do
     conn
     |> put_status(:conflict)
     |> put_view(json: RicqchetWeb.ErrorJSON)
     |> render(:error,
       error: "user_already_exists",
-      message: "A user with this email already exists in the tenant"
+      message: "A user with this email already exists"
     )
   end
 
@@ -165,7 +135,7 @@ defmodule RicqchetWeb.FallbackController do
     )
   end
 
-  # Handle Multi transaction errors (e.g., from Auth.register_user)
+  # Handle Ecto.Multi transaction errors by delegating to the changeset handler
   def call(conn, {:error, _step, %Ecto.Changeset{} = changeset}) do
     call(conn, {:error, changeset})
   end

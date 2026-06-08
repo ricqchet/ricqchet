@@ -1,5 +1,44 @@
 # Configuration
 
+## Initial admin
+
+Ricqchet is self-hosted and single-organization, with no public sign-up. On first
+run, a single default organization and one **admin** user are created and the
+credentials are printed to the console.
+
+This happens automatically during `mix setup` / `mix ecto.setup` (development) or
+when you run the release seed task (production):
+
+```bash
+bin/ricqchet eval "Ricqchet.Release.migrate()"
+bin/ricqchet eval "Ricqchet.Release.seed()"
+```
+
+Configure the initial admin via environment variables:
+
+| Variable         | Description                                  | Default          |
+| ---------------- | -------------------------------------------- | ---------------- |
+| `ADMIN_EMAIL`    | Email address for the initial admin          | `admin@localhost`|
+| `ADMIN_PASSWORD` | Password for the initial admin (12-72 chars) | _generated_      |
+
+If `ADMIN_PASSWORD` is unset, a secure random password is generated and printed
+**once** to the logs. **Sign in and change it immediately** (Settings → Change
+password, or `POST /v1/auth/change-password`).
+
+The bootstrap is idempotent — if an admin already exists, it makes no changes.
+To recover a locked-out instance without email:
+
+```bash
+# Development
+mix ricqchet.reset_admin_password admin@localhost
+
+# Production release
+bin/ricqchet eval 'Ricqchet.Release.reset_admin_password("admin@localhost")'
+```
+
+Additional users are created by admins (see [Authentication](authentication.md));
+each has an `admin`, `member`, or `viewer` role.
+
 ## Oban (Job Queue)
 
 Configure Oban for reliable message delivery in `config/config.exs`:
@@ -178,8 +217,11 @@ Credentials (cookies, authorization headers) are supported for authenticated req
 | `DATABASE_URL` | PostgreSQL connection string | - |
 | `POOL_SIZE` | Database connection pool size | 10 |
 | `SECRET_KEY_BASE` | Phoenix secret key | - |
+| `JWT_SECRET` | Secret used to sign JWT access tokens | - |
 | `PHX_HOST` | Application host for URLs | localhost |
 | `PORT` | HTTP server port | 4000 |
+| `ADMIN_EMAIL` | Email for the initial admin (first run only) | admin@localhost |
+| `ADMIN_PASSWORD` | Password for the initial admin (first run only) | generated |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | http://localhost:3000, http://localhost:4000 |
 
 ## Development Dashboard

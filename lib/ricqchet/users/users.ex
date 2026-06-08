@@ -25,6 +25,83 @@ defmodule Ricqchet.Users do
   end
 
   @doc """
+  Creates a user directly, the way an admin provisions accounts on a
+  self-hosted instance (no email invitation).
+
+  If no password is supplied a secure random one is generated and returned so the
+  admin can share it out of band. When no role is supplied the user defaults to
+  the least-privileged `viewer` role rather than the schema default. The user is
+  created active and confirmed (there is no email-verification step).
+
+  Returns `{:ok, user, generated_password}` where `generated_password` is the
+  plaintext password only when one was generated, or `nil` when the caller
+  supplied a password.
+
+  ## Examples
+
+      iex> create_user_by_admin(tenant, %{"email" => "dev@example.com", "role" => "member"})
+      {:ok, %User{}, "generated-password"}
+
+      iex> create_user_by_admin(tenant, %{"email" => "dev@example.com", "role" => "viewer", "password" => "supplied-secret-pw"})
+      {:ok, %User{}, nil}
+
+  """
+  def create_user_by_admin(%Tenant{} = tenant, attrs) do
+    {generated_password, attrs} =
+      attrs
+      |> normalize_keys()
+      |> Map.put_new("role", "viewer")
+      |> Map.put("status", "active")
+      |> ensure_password()
+
+    result =
+      %User{}
+      |> User.registration_changeset(tenant, attrs)
+      |> User.confirm_changeset()
+      |> Repo.insert()
+
+    case result do
+      {:ok, user} -> {:ok, user, generated_password}
+      {:error, changeset} -> {:error, insert_error(changeset)}
+    end
+  end
+
+  # Surface a duplicate email as a dedicated error (rendered as 409) and pass
+  # any other validation error through as the changeset (rendered as 422).
+  defp insert_error(%Ecto.Changeset{} = changeset) do
+    case changeset.errors[:email] do
+      {_message, opts} ->
+        if Keyword.get(opts, :constraint) == :unique,
+          do: :user_already_exists,
+          else: changeset
+
+      _ ->
+        changeset
+    end
+  end
+
+  defp normalize_keys(attrs) do
+    Map.new(attrs, fn {key, value} -> {to_string(key), value} end)
+  end
+
+  defp ensure_password(attrs) do
+    case Map.get(attrs, "password") do
+      password when is_binary(password) and password != "" ->
+        {nil, attrs}
+
+      _ ->
+        password = generate_password()
+        {password, Map.put(attrs, "password", password)}
+    end
+  end
+
+  defp generate_password do
+    18
+    |> :crypto.strong_rand_bytes()
+    |> Base.url_encode64(padding: false)
+  end
+
+  @doc """
   Gets a user by ID.
   """
   def get_user(id), do: Repo.get(User, id)

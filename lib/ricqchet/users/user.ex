@@ -44,7 +44,9 @@ defmodule Ricqchet.Users.User do
     field :email, :string
     field :password_hash, :string
     field :status, :string, default: "active"
-    field :role, :string, default: "admin"
+    # Least privilege: a user with no explicit role is a read-only viewer, never an
+    # admin. Admins are created explicitly (bootstrap, admin-create endpoint).
+    field :role, :string, default: "viewer"
     field :confirmed_at, :utc_datetime_usec
     field :last_login_at, :utc_datetime_usec
     field :token_version, :integer, default: 1

@@ -47,14 +47,10 @@ defmodule RicqchetWeb.Router do
 
     get "/", PageController, :index
     get "/login", PageController, :login
-    get "/register", PageController, :register
     get "/forgot-password", PageController, :forgot_password
     get "/reset-password", PageController, :reset_password
-    get "/verify-email", PageController, :verify_email
-    get "/accept-invite", PageController, :accept_invite
 
     post "/session", SessionController, :create
-    post "/session/register", SessionController, :register
     delete "/session", SessionController, :delete
 
     post "/forgot-password", PageController, :submit_forgot_password
@@ -100,11 +96,8 @@ defmodule RicqchetWeb.Router do
   scope "/v1/auth", RicqchetWeb do
     pipe_through [:api]
 
-    post "/register", AuthController, :register
-    post "/verify-email", AuthController, :verify_email
     post "/login", AuthController, :login
     post "/refresh", AuthController, :refresh
-    post "/accept-invite", AuthController, :accept_invite
   end
 
   # Rate-limited public auth endpoints (to prevent abuse)
@@ -119,7 +112,6 @@ defmodule RicqchetWeb.Router do
   scope "/v1/auth", RicqchetWeb do
     pipe_through [:api, :jwt_authenticated]
 
-    post "/resend-verification", AuthController, :resend_verification
     post "/logout", AuthController, :logout
     post "/change-password", AuthController, :change_password
   end
@@ -138,9 +130,9 @@ defmodule RicqchetWeb.Router do
     get "/", TenantController, :show
     patch "/", TenantController, :update
 
-    # Tenant user management
+    # User management (admin only for create/update/delete)
     get "/users", TenantUserController, :index
-    post "/users/invite", TenantUserController, :invite
+    post "/users", TenantUserController, :create
     patch "/users/:id", TenantUserController, :update
     delete "/users/:id", TenantUserController, :delete
   end

@@ -1,6 +1,14 @@
 # CLAUDE.md
 
-Ricqchet is an HTTP message relay service with guaranteed delivery, retries, fan-out, batching, and scheduling. Built with Phoenix 1.8 (API-only) and Oban for job processing.
+Ricqchet is an HTTP message relay service with guaranteed delivery, retries, fan-out, batching, and scheduling. Built with Phoenix 1.8 (JSON API + LiveView dashboard) and Oban for job processing.
+
+## Deployment & Access Model
+
+Ricqchet is **self-hosted and single-organization** (one hidden default tenant per instance):
+
+- **No public sign-up.** The first admin is created on first run from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (or a generated password) via `Ricqchet.Release.bootstrap/0` (called by `priv/repo/seeds.exs`). Recovery: `mix ricqchet.reset_admin_password [email]`.
+- **Admins add users directly** (`POST /v1/tenant/users` or the Team page) — no email invitations.
+- **Roles** (`Ricqchet.Authorization` is the single source of truth): `admin` (full + users + settings), `member` (create/edit apps, API keys, channels), `viewer` (read-only). Use `Authorization.authorize/2` in controllers, `require_editor`/`require_admin` in LiveViews, and `can?/2` in templates. Role checks apply to the JWT/session surfaces, **not** the API-key relay endpoints.
 
 ## Quick Reference
 

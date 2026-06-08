@@ -7,8 +7,8 @@ defmodule RicqchetWeb.ChannelNamespaceController do
 
   ## Authorization
 
-  - **List**: Any authenticated tenant member
-  - **Create/Update/Delete**: Tenant admin only
+  - **List**: Any authenticated user
+  - **Create/Update/Delete**: Member or admin
   """
 
   use RicqchetWeb, :controller
@@ -16,9 +16,9 @@ defmodule RicqchetWeb.ChannelNamespaceController do
 
   alias OpenApiSpex.Schema
   alias Ricqchet.Applications
+  alias Ricqchet.Authorization
   alias Ricqchet.Channels.NamespaceConfig
   alias Ricqchet.Channels.Namespaces
-  alias Ricqchet.Users.User
   alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
@@ -55,7 +55,7 @@ defmodule RicqchetWeb.ChannelNamespaceController do
 
   operation(:create,
     summary: "Create a channel namespace",
-    description: "Creates a new channel namespace configuration. Admin only.",
+    description: "Creates a new channel namespace configuration. Member or admin only.",
     parameters: [
       application_id: [
         in: :path,
@@ -79,7 +79,7 @@ defmodule RicqchetWeb.ChannelNamespaceController do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :editor),
          {:ok, application} <- get_application_or_error(tenant, app_id),
          namespace_params = Map.drop(params, ["application_id"]),
          {:ok, namespace} <-
@@ -94,7 +94,7 @@ defmodule RicqchetWeb.ChannelNamespaceController do
 
   operation(:update,
     summary: "Update a channel namespace",
-    description: "Updates an existing channel namespace configuration. Admin only.",
+    description: "Updates an existing channel namespace configuration. Member or admin only.",
     parameters: [
       application_id: [
         in: :path,
@@ -123,7 +123,7 @@ defmodule RicqchetWeb.ChannelNamespaceController do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :editor),
          {:ok, application} <- get_application_or_error(tenant, app_id),
          {:ok, namespace} <- get_namespace_or_error(id, application.id),
          {:ok, updated} <-
@@ -135,7 +135,7 @@ defmodule RicqchetWeb.ChannelNamespaceController do
 
   operation(:delete,
     summary: "Delete a channel namespace",
-    description: "Deletes a channel namespace configuration. Admin only.",
+    description: "Deletes a channel namespace configuration. Member or admin only.",
     parameters: [
       application_id: [
         in: :path,
@@ -159,7 +159,7 @@ defmodule RicqchetWeb.ChannelNamespaceController do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :editor),
          {:ok, application} <- get_application_or_error(tenant, app_id),
          {:ok, namespace} <- get_namespace_or_error(id, application.id),
          {:ok, _deleted} <- Namespaces.delete_namespace(namespace) do
@@ -167,9 +167,6 @@ defmodule RicqchetWeb.ChannelNamespaceController do
       send_resp(conn, :no_content, "")
     end
   end
-
-  defp authorize_admin(%User{role: "admin"}), do: :ok
-  defp authorize_admin(_user), do: {:error, :forbidden}
 
   defp get_application_or_error(tenant, app_id) do
     case Applications.get_application_by_tenant(tenant, app_id) do

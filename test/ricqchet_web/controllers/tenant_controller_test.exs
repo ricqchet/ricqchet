@@ -1,41 +1,33 @@
 defmodule RicqchetWeb.TenantControllerTest do
   use RicqchetWeb.ConnCase, async: false
 
-  alias Ricqchet.Auth
-  alias Ricqchet.Auth.Token
-  alias Ricqchet.Repo
-  alias Ricqchet.Users
-
   describe "GET /v1/tenant" do
     setup do
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "admin@tenant-test.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Tenant Test Org"
-        })
+      {:ok, %{user: admin, tenant: tenant}} =
+        create_tenant_and_user(
+          email: "admin@tenant-test.com",
+          password: "secure_password_123",
+          tenant_name: "Tenant Test Org"
+        )
 
-      {:ok, unloaded_admin} = Auth.verify_email(token)
-      admin = Repo.preload(unloaded_admin, :tenant)
-      {:ok, admin_token, _claims} = Token.generate_access_token(admin)
+      admin_token = access_token_for(admin)
 
       # Create a member user
-      {:ok, unconfirmed_member} =
-        Users.create_user(admin.tenant, %{
-          "email" => "member@tenant-test.com",
-          "password" => "secure_password_123",
-          "role" => "member"
-        })
+      {:ok, %{user: member}} = create_tenant_and_user(tenant: tenant, role: "member")
+      member_token = access_token_for(member)
 
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      # Create a viewer user
+      {:ok, %{user: viewer}} = create_tenant_and_user(tenant: tenant, role: "viewer")
+      viewer_token = access_token_for(viewer)
 
       %{
         admin: admin,
         admin_token: admin_token,
         member: member,
         member_token: member_token,
-        tenant: admin.tenant
+        viewer: viewer,
+        viewer_token: viewer_token,
+        tenant: tenant
       }
     end
 
@@ -79,6 +71,24 @@ defmodule RicqchetWeb.TenantControllerTest do
       refute response["signing_secret"]
     end
 
+    test "returns tenant details for viewer without signing_secret", %{
+      conn: conn,
+      tenant: tenant,
+      viewer_token: token
+    } do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/v1/tenant")
+
+      response = json_response(conn, 200)
+
+      assert response["id"] == tenant.id
+      assert response["name"] == "Tenant Test Org"
+      refute response["signing_secret"]
+    end
+
     test "returns 401 without authentication", %{conn: conn} do
       conn =
         conn
@@ -91,34 +101,31 @@ defmodule RicqchetWeb.TenantControllerTest do
 
   describe "PATCH /v1/tenant" do
     setup do
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "admin@patch-test.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Patch Test Org"
-        })
+      {:ok, %{user: admin, tenant: tenant}} =
+        create_tenant_and_user(
+          email: "admin@patch-test.com",
+          password: "secure_password_123",
+          tenant_name: "Patch Test Org"
+        )
 
-      {:ok, unloaded_admin} = Auth.verify_email(token)
-      admin = Repo.preload(unloaded_admin, :tenant)
-      {:ok, admin_token, _claims} = Token.generate_access_token(admin)
+      admin_token = access_token_for(admin)
 
       # Create a member user
-      {:ok, unconfirmed_member} =
-        Users.create_user(admin.tenant, %{
-          "email" => "member@patch-test.com",
-          "password" => "secure_password_123",
-          "role" => "member"
-        })
+      {:ok, %{user: member}} = create_tenant_and_user(tenant: tenant, role: "member")
+      member_token = access_token_for(member)
 
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      # Create a viewer user
+      {:ok, %{user: viewer}} = create_tenant_and_user(tenant: tenant, role: "viewer")
+      viewer_token = access_token_for(viewer)
 
       %{
         admin: admin,
         admin_token: admin_token,
         member: member,
         member_token: member_token,
-        tenant: admin.tenant
+        viewer: viewer,
+        viewer_token: viewer_token,
+        tenant: tenant
       }
     end
 
@@ -162,7 +169,20 @@ defmodule RicqchetWeb.TenantControllerTest do
         |> put_req_header("authorization", "Bearer #{token}")
         |> patch("/v1/tenant", %{"name" => "Should Not Work"})
 
-      assert json_response(conn, 403)
+      assert json_response(conn, 403)["error"] == "forbidden"
+    end
+
+    test "viewer cannot update tenant", %{
+      conn: conn,
+      viewer_token: token
+    } do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> patch("/v1/tenant", %{"name" => "Should Not Work"})
+
+      assert json_response(conn, 403)["error"] == "forbidden"
     end
 
     test "returns 401 without authentication", %{conn: conn} do

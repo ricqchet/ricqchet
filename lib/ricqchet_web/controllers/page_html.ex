@@ -1,6 +1,6 @@
 defmodule RicqchetWeb.PageHTML do
   @moduledoc """
-  HTML templates for public pages (login, register, etc.)
+  HTML templates for public pages (login, password recovery).
   """
   use RicqchetWeb, :html
 

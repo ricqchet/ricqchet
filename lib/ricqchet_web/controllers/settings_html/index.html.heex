@@ -8,10 +8,19 @@
   <.card>
     <h3 class="text-lg font-semibold text-[hsl(var(--foreground))]">Organization</h3>
     <p class="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-      Update your organization name
+      <%= if can?(@current_user, :manage_settings) do %>
+        Update your organization name
+      <% else %>
+        Only admins can change organization settings
+      <% end %>
     </p>
 
-    <form action={~p"/settings/tenant"} method="post" class="mt-4 space-y-4">
+    <form
+      :if={can?(@current_user, :manage_settings)}
+      action={~p"/settings/tenant"}
+      method="post"
+      class="mt-4 space-y-4"
+    >
       <input type="hidden" name="_method" value="put" />
       <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
 
@@ -27,6 +36,10 @@
         Save changes
       </.button>
     </form>
+
+    <p :if={!can?(@current_user, :manage_settings)} class="mt-4 text-sm font-medium">
+      {@tenant.name}
+    </p>
   </.card>
 
   <!-- Change Password -->
