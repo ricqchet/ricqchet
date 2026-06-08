@@ -1,76 +1,110 @@
 # Ricqchet
 
-HTTP message queuing service with guaranteed delivery, similar to [Upstash QStash](https://upstash.com/docs/qstash/overall/getstarted).
+**Self-hosted HTTP message relay and real-time channels.** Publish messages once — Ricqchet handles guaranteed delivery, retries, fan-out, batching, and scheduling. Connect clients with WebSocket channels that include history, presence, and cache.
 
-Ricqchet allows serverless functions to POST events that are queued and delivered to destination URLs with automatic retries and exponential backoff.
+> Own your infrastructure. No per-message pricing, no vendor lock-in, no data leaving your stack.
+
+---
+
+## What Ricqchet does
+
+Ricqchet gives you two first-class capabilities in a single service:
+
+**Message relay** — your application POSTs an event to Ricqchet, which queues it, handles retries with exponential backoff, verifies delivery with HMAC signatures, and routes failures to a dead-letter queue. Think Upstash QStash, self-hosted and open-source.
+
+**Real-time channels** — broadcast events to WebSocket clients instantly. Public, private (auth-gated), and presence (member-tracking) channels with event history, cache channels (last-event-on-join), client-to-client messaging, and per-namespace configuration. Think Pusher or Ably, on your own infrastructure.
+
+---
 
 ## Features
 
-- **Guaranteed delivery** with automatic retries and exponential backoff
-- **Self-hosted**, single-organization with role-based access (admin/member/viewer)
-- **API key authentication** for the relay API
-- **Deduplication** to prevent duplicate message processing
-- **Delayed delivery** with configurable scheduling
-- **Message status tracking** with detailed attempt history
-- **Header forwarding** to destination endpoints
-- **Batching** to group messages for efficient delivery
-- **Fan-out** to broadcast to multiple destinations
+### Message Relay
 
-## Client Libraries
+| Feature | Details |
+|---------|---------|
+| **Guaranteed delivery** | Automatic retries with exponential backoff (10s → 30s → 90s → 270s → max 8h) |
+| **Deduplication** | Configurable TTL window (default 5m, max 24h) — rejects duplicates with 409 |
+| **Delayed delivery** | Schedule messages up to 7 days ahead (`30s`, `5m`, `2h`, `1d`) |
+| **Fan-out** | Broadcast to up to 100 destinations in a single API call |
+| **Batching** | Group messages into a single delivery — dispatched by size or timeout |
+| **Header forwarding** | `Ricqchet-Forward-*` headers delivered with prefix stripped |
+| **HMAC signatures** | Every delivery signed with `X-Ricqchet-Signature` (HMAC-SHA256) |
+| **Dead-letter queue** | Per-application DLQ webhook fires when all retries are exhausted |
+| **Flow control** | Per-destination parallelism and rate limiting, cluster-coordinated via PostgreSQL |
+| **Cancellation** | Cancel pending messages before dispatch |
 
-- [Elixir Client](https://github.com/ricqchet/elixir-client)
-- [TypeScript Client](https://github.com/ricqchet/typescript-client)
+### Real-Time Channels
+
+| Feature | Details |
+|---------|---------|
+| **Channel types** | Public, Private (`private-` prefix), Presence (`presence-` prefix) |
+| **Event history** | Configurable retention per namespace — query via API or recover on reconnect |
+| **Cache channels** | New subscribers receive the last published event immediately |
+| **Presence tracking** | See who's connected with `user_id` and custom metadata |
+| **Client events** | Peer-to-peer messaging on private/presence channels (rate-limited, `client-` prefix) |
+| **Missed-event recovery** | Rejoin with `last_event_id` to catch up after disconnect |
+| **Namespace config** | Pattern-based settings (`chat-*`, `orders.us.*`) for max members, history, auth, webhooks |
+| **Lifecycle webhooks** | Receive events when channels open/close or members join/leave |
+
+### Platform
+
+- **LiveView dashboard** — manage applications, API keys, channels, and team members; monitor delivery in real time
+- **Role-based access** — `admin` / `member` / `viewer` roles with granular permissions
+- **OpenAPI docs** — full Swagger UI at `/api/docs`
+- **Structured logging** — metadata-rich log output for easy querying
+- **Telemetry** — Phoenix, Ecto, Oban, and custom delivery metrics
+- **Self-hosted, single-org** — one deployment per team; no sign-up flow, no multi-tenant complexity
+
+---
 
 ## Tech Stack
 
 - Elixir 1.18+ / OTP 27+
-- Phoenix 1.8+ (API only)
+- Phoenix 1.8+ (JSON API + LiveView dashboard)
 - PostgreSQL 15+
-- Oban for reliable job processing
-- Req for HTTP client
+- Oban — reliable background job processing
+- Req — HTTP client
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-- Erlang 27+
-- Elixir 1.18+
-- PostgreSQL 15+
+- Erlang 27+, Elixir 1.18+, PostgreSQL 15+
 
-If using [mise](https://mise.jdx.dev/), run `mise install` from the repo root.
+Using [mise](https://mise.jdx.dev/)? Run `mise install` from the repo root.
 
 ### Setup
 
 ```bash
-# Install dependencies
-mix setup
-
-# Start the server
-mix phx.server
+mix setup        # install deps, create DB, run migrations, seed
+mix phx.server   # start dev server
 ```
+
+API docs are at [`/api/docs`](http://localhost:4000/api/docs) once the server is running.
 
 ### First-Run Setup
 
-Ricqchet is **self-hosted and single-organization** — there is no public sign-up.
-On first run (`mix setup` / `mix ecto.setup`) it creates one default organization
-and an initial **admin** user, printing the credentials to the console.
+On first run, Ricqchet creates a default organization and an initial **admin** user. Credentials are printed to the console.
 
-Configure the admin via environment variables (optional):
+Configure the admin before setup (optional):
 
 ```bash
 ADMIN_EMAIL=admin@yourco.com ADMIN_PASSWORD=a-strong-password mix ecto.setup
 ```
 
-If `ADMIN_PASSWORD` is unset, a secure password is generated and printed once.
-**Sign in at `/login` and change it immediately** (Settings → Change password).
-Locked out? Reset it without email:
+If `ADMIN_PASSWORD` is not set, a secure password is generated and printed once — save it before the terminal scrolls.
+
+**Sign in at `/login` and change your password immediately** (Settings → Change password).
+
+Locked out? Reset without email:
 
 ```bash
 mix ricqchet.reset_admin_password admin@yourco.com
 ```
 
-Admins create additional users (`member` / `viewer` roles) from the **Team** page
-or the API — see [Authentication](docs/authentication.md).
+Admins add team members (with `member` or `viewer` roles) from the **Team** page or `POST /v1/tenant/users`.
 
 For production releases:
 
@@ -79,162 +113,127 @@ bin/ricqchet eval "Ricqchet.Release.migrate()"
 bin/ricqchet eval "Ricqchet.Release.seed()"
 ```
 
-## API Reference
+---
 
-All API endpoints (except `/health`) require authentication via Bearer token:
+## Quick API Examples
+
+All relay and channel endpoints require an API key:
 
 ```
 Authorization: Bearer <api_key>
 ```
 
-### Health Check
+Management endpoints (applications, users, stats) use JWT tokens from `POST /v1/auth/login`.
 
-```
-GET /health
-```
-
-Returns `{"status": "ok"}` - no authentication required.
-
-### Publish Message
-
-```
-POST /v1/publish
-```
-
-Publishes a message to be delivered to the destination URL.
-
-**Headers:**
-
-| Header | Description | Example |
-|--------|-------------|---------|
-| `Ricqchet-Destination` | Destination URL (required unless using fan-out) | `https://api.example.com/webhook` |
-| `Ricqchet-Fan-Out` | Comma-separated URLs for fan-out (max 100) | `https://api1.com, https://api2.com` |
-| `Ricqchet-Delay` | Delay before first attempt | `30s`, `5m`, `2h`, `1d` |
-| `Ricqchet-Dedup-Key` | Deduplication key | `order-123` |
-| `Ricqchet-Dedup-TTL` | Dedup window in seconds (default: 300) | `600` |
-| `Ricqchet-Retries` | Override max retries (default: 3) | `5` |
-| `Ricqchet-Forward-*` | Headers to forward (prefix stripped) | `Ricqchet-Forward-X-Custom: value` |
-| `Ricqchet-Batch-Key` | Group messages into a batch (opt-in batching) | `user-123-events` |
-| `Ricqchet-Batch-Size` | Max messages per batch (1-1000, default: 10) | `50` |
-| `Ricqchet-Batch-Timeout` | Seconds before batch is sent (1-3600, default: 5) | `30` |
-
-**Example:**
+### Publish a message
 
 ```bash
-curl -X POST "http://localhost:4000/v1/publish" \
+curl -X POST http://localhost:4000/v1/publish \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
   -H "Ricqchet-Destination: https://api.example.com/webhook" \
   -H "Ricqchet-Delay: 30s" \
   -H "Ricqchet-Dedup-Key: order-123" \
-  -d '{"event": "order.created", "data": {"id": 123}}'
+  -d '{"event": "order.created", "id": 123}'
 ```
-
-**Response (202 Accepted):**
 
 ```json
 {"message_id": "550e8400-e29b-41d4-a716-446655440000"}
 ```
 
-**Response (409 Conflict - duplicate):**
-
-```json
-{
-  "error": "duplicate_message",
-  "message": "A message with this dedup_key already exists: 550e8400-..."
-}
-```
-
-### Batching
-
-When you include the `Ricqchet-Batch-Key` header, messages are collected into batches and delivered together as a JSON array in a single HTTP request.
-
-**How batching works:**
-
-1. Messages with the same `tenant + destination_url + batch_key` are grouped together
-2. A batch is dispatched when either:
-   - The batch reaches `Ricqchet-Batch-Size` messages (default: 10)
-   - The `Ricqchet-Batch-Timeout` expires (default: 5 seconds)
-3. The destination receives a JSON array containing all message payloads
-
-**Batching constraints:**
-
-- `Ricqchet-Batch-Size`: 1 to 1000 messages (default: 10)
-- `Ricqchet-Batch-Timeout`: 1 to 3600 seconds (default: 5)
-- Batched messages share the same retry behavior
-
-### Fan-out
-
-Use the `Ricqchet-Fan-Out` header to broadcast the same message to multiple destinations with a single API call.
-
-**Example:**
+### Fan-out to multiple destinations
 
 ```bash
-curl -X POST "http://localhost:4000/v1/publish" \
+curl -X POST http://localhost:4000/v1/publish \
   -H "Authorization: Bearer <api_key>" \
   -H "Content-Type: application/json" \
-  -H "Ricqchet-Fan-Out: https://api1.example.com/webhook, https://api2.example.com/webhook" \
-  -d '{"event": "order.created", "data": {"id": 123}}'
+  -H "Ricqchet-Fan-Out: https://api1.example.com/hook, https://api2.example.com/hook" \
+  -d '{"event": "order.created", "id": 123}'
 ```
 
-**Response:**
+```json
+{"message_ids": ["550e8400-...", "550e8400-..."]}
+```
+
+### Batch messages
+
+```bash
+curl -X POST http://localhost:4000/v1/publish \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -H "Ricqchet-Destination: https://api.example.com/webhook" \
+  -H "Ricqchet-Batch-Key: user-123-events" \
+  -H "Ricqchet-Batch-Size: 25" \
+  -H "Ricqchet-Batch-Timeout: 10" \
+  -d '{"event": "page.viewed", "path": "/pricing"}'
+```
+
+### Publish to a channel
+
+```bash
+curl -X POST http://localhost:4000/v1/channels/events \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{"channel": "orders", "event": "order.updated", "data": {"id": 123, "status": "shipped"}}'
+```
+
+### Connect a WebSocket client (JavaScript)
+
+```js
+const socket = new WebSocket(
+  `ws://localhost:4000/socket/websocket?api_key=<api_key>&user_id=<user_id>`
+);
+
+// Subscribe to a channel
+socket.send(JSON.stringify({
+  topic: "orders",
+  event: "phx_join",
+  payload: {},
+  ref: "1"
+}));
+```
+
+Private channels require an auth endpoint — see [docs/channels.md](docs/channels.md).
+
+### Check message status
+
+```bash
+curl http://localhost:4000/v1/messages/550e8400-... \
+  -H "Authorization: Bearer <api_key>"
+```
 
 ```json
 {
-  "message_ids": [
-    "550e8400-e29b-41d4-a716-446655440000",
-    "550e8400-e29b-41d4-a716-446655440001"
-  ]
-}
-```
-
-**Fan-out constraints:**
-
-- Maximum 100 destinations per request
-- Cannot be combined with `Ricqchet-Destination` or batching
-
-### Get Message Status
-
-```
-GET /v1/messages/{id}
-```
-
-**Response:**
-
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "550e8400-...",
   "status": "delivered",
-  "destination_url": "https://api.example.com/webhook",
-  "method": "POST",
   "attempts": 1,
   "max_retries": 3,
-  "created_at": "2024-01-15T10:30:00Z",
-  "scheduled_at": "2024-01-15T10:30:30Z",
-  "dispatched_at": "2024-01-15T10:30:30Z",
-  "completed_at": "2024-01-15T10:30:31Z",
-  "last_error": null,
-  "last_response_status": 200
+  "last_response_status": 200,
+  "completed_at": "2024-01-15T10:30:31Z"
 }
 ```
 
-**Status values:**
-- `pending` - Waiting to be dispatched
-- `dispatched` - Currently being delivered
-- `delivered` - Successfully delivered (2xx response)
-- `failed` - Failed after all retries exhausted
+---
 
-### Cancel Message
+## Verifying Signatures
+
+Every delivered message includes an `X-Ricqchet-Signature` header. Verify it at your endpoint:
 
 ```
-DELETE /v1/messages/{id}
+X-Ricqchet-Signature: t=1705316400,v1=a1b2c3...
 ```
 
-Cancels a pending message. Returns 409 if already dispatched.
+```elixir
+signature = "t=1705316400,v1=a1b2c3..."
+[_, ts] = String.split(signature, "t=", parts: 2) |> List.first() |> String.split(",v1=")
+expected = :crypto.mac(:hmac, :sha256, signing_secret, "#{ts}.#{raw_body}") |> Base.encode16(case: :lower)
+```
+
+Get your tenant's signing secret from `GET /v1/signing-secret` (admin only) or the Settings page.
+
+---
 
 ## Retry Behavior
-
-Failed deliveries are retried with exponential backoff:
 
 | Attempt | Delay |
 |---------|-------|
@@ -242,68 +241,67 @@ Failed deliveries are retried with exponential backoff:
 | 2 | 30 seconds |
 | 3 | 90 seconds |
 | 4 | 270 seconds (~4.5 min) |
-| 5+ | Continues 3x growth, max 8 hours |
+| 5+ | 3× growth, max 8 hours |
 
-## Delivered Headers
+Default is 3 retries. Override per-message with `Ricqchet-Retries: 0` (fire-and-forget) to `Ricqchet-Retries: 10`. When all retries are exhausted, the message is sent to the application's DLQ webhook (if configured).
 
-When Ricqchet delivers a message, it includes these headers:
+---
+
+## Delivery Headers
 
 | Header | Description |
 |--------|-------------|
-| `Content-Type` | Original content type |
+| `Content-Type` | From original publish request |
 | `User-Agent` | `Ricqchet/1.0` |
 | `X-Ricqchet-Message-Id` | Message UUID |
-| `X-Ricqchet-Attempt` | Current attempt number |
-| + any `Ricqchet-Forward-*` headers | Forwarded with prefix stripped |
+| `X-Ricqchet-Attempt` | Current attempt number (1-based) |
+| `X-Ricqchet-Signature` | HMAC-SHA256 signature for verification |
+| `Ricqchet-Forward-*` headers | Forwarded with prefix stripped |
+
+---
 
 ## Documentation
 
-- [Overview](docs/overview.md) - What Ricqchet is and how it works
-- [API Reference](docs/api-reference.md) - Endpoints, headers, and examples
-- [Authentication](docs/authentication.md) - Users, roles, and API keys
-- [Batching](docs/batching.md) - Message batching configuration
-- [Delivery](docs/delivery.md) - Retry behavior and delivered headers
-- [Configuration](docs/configuration.md) - Application configuration
-- [Receiving Webhooks](docs/receiving-webhooks.md) - Guide for webhook consumers
+- [Overview](docs/overview.md) — how Ricqchet works, core concepts
+- [API Reference](docs/api-reference.md) — all endpoints, headers, and examples
+- [Authentication](docs/authentication.md) — users, roles, API keys, and JWT
+- [Channels](docs/channels.md) — WebSocket channels, presence, history, and namespaces
+- [Batching](docs/batching.md) — message batching configuration
+- [Delivery](docs/delivery.md) — retry behavior, timeouts, and DLQ
+- [Configuration](docs/configuration.md) — environment variables and runtime settings
+- [Receiving Webhooks](docs/receiving-webhooks.md) — guide for webhook consumers
 
-Interactive API docs available at `/api/docs` when the server is running.
+Interactive API docs: [`/api/docs`](http://localhost:4000/api/docs)
+
+---
 
 ## Development
 
 ### Running Tests
 
 ```bash
-mix test
+mix test              # all tests
+mix test --failed     # re-run failures only
 ```
 
 ### Code Quality
 
 ```bash
-# Format code
-mix format
-
-# Static analysis
-mix credo --strict
-
-# Type checking
-mix dialyzer
-
-# Run all checks (before committing)
-mix precommit
+mix format            # auto-format
+mix credo --strict    # static analysis
+mix dialyzer          # type checking
+mix precommit         # all of the above (required before committing)
 ```
 
 ### Database
 
 ```bash
-# Create and migrate
-mix ecto.setup
-
-# Reset database
-mix ecto.reset
-
-# Run migrations only
-mix ecto.migrate
+mix ecto.setup        # create, migrate, seed
+mix ecto.reset        # drop and recreate
+mix ecto.migrate      # migrations only
 ```
+
+---
 
 ## Commit Conventions
 
@@ -312,8 +310,20 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/):
 ```
 feat: add webhook signature verification
 fix: correct retry backoff calculation
-docs: update api reference for fan-out
+docs: update api reference for channels
+refactor(delivery): extract retry logic to module
 ```
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
+
+---
+
+## Client Libraries
+
+- [Elixir Client](https://github.com/ricqchet/elixir-client)
+- [TypeScript Client](https://github.com/ricqchet/typescript-client)
+
+---
 
 ## License
 
