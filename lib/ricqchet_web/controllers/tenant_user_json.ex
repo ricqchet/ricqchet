@@ -3,7 +3,6 @@ defmodule RicqchetWeb.TenantUserJSON do
   JSON views for tenant user endpoints.
   """
 
-  alias Ricqchet.Tenants.Invitation
   alias Ricqchet.Users.User
 
   @doc """
@@ -11,7 +10,7 @@ defmodule RicqchetWeb.TenantUserJSON do
 
   - `index.json` - Paginated list of users
   - `show.json` - Single user details
-  - `invite.json` - Invitation response
+  - `created.json` - Newly created user (with one-time password when generated)
   - `deleted.json` - User removal confirmation
   """
   def render(template, assigns)
@@ -27,8 +26,10 @@ defmodule RicqchetWeb.TenantUserJSON do
     user_json(user)
   end
 
-  def render("invite.json", %{invitation: invitation}) do
-    invitation_json(invitation)
+  def render("created.json", %{user: user, password: password}) do
+    user
+    |> user_json()
+    |> maybe_put_password(password)
   end
 
   def render("deleted.json", %{id: id}) do
@@ -51,17 +52,8 @@ defmodule RicqchetWeb.TenantUserJSON do
     }
   end
 
-  defp invitation_json(%Invitation{} = invitation) do
-    %{
-      id: invitation.id,
-      email: invitation.email,
-      role: invitation.role,
-      status: invitation.status,
-      token: invitation.token,
-      expires_at: invitation.expires_at,
-      inserted_at: invitation.inserted_at
-    }
-  end
+  defp maybe_put_password(user_map, nil), do: user_map
+  defp maybe_put_password(user_map, password), do: Map.put(user_map, :password, password)
 
   defp meta_json(meta) do
     %{

@@ -2,24 +2,13 @@ defmodule RicqchetWeb.ChannelNamespaceControllerTest do
   use RicqchetWeb.ConnCase, async: false
 
   alias Ricqchet.Applications
-  alias Ricqchet.Auth
-  alias Ricqchet.Auth.Token
   alias Ricqchet.Channels.Namespaces
-  alias Ricqchet.Repo
 
   setup %{conn: conn} do
-    {:ok, %{user: _user, verification_token: token}} =
-      Auth.register_user(%{
-        "email" => "admin#{System.unique_integer()}@example.com",
-        "password" => "secure_password_123",
-        "tenant_name" => "Test Org #{System.unique_integer()}"
-      })
+    {:ok, %{user: user, tenant: tenant}} =
+      create_tenant_and_user(email: "admin#{System.unique_integer()}@example.com")
 
-    {:ok, verified_user} = Auth.verify_email(token)
-    {:ok, access_token, _claims} = Token.generate_access_token(verified_user)
-
-    user = Repo.preload(verified_user, :tenant)
-    tenant = user.tenant
+    access_token = access_token_for(user)
 
     {:ok, application} = Applications.create_application(tenant, %{name: "Test Application"})
 
@@ -100,15 +89,15 @@ defmodule RicqchetWeb.ChannelNamespaceControllerTest do
       assert json_response(conn, 422)
     end
 
-    test "returns 403 for non-admin user", %{tenant: tenant, application: app} do
-      {:ok, member} =
-        Ricqchet.Users.create_user(tenant, %{
+    test "allows member to create a namespace", %{tenant: tenant, application: app} do
+      {:ok, %{user: member}} =
+        create_tenant_and_user(
+          tenant: tenant,
           email: "member#{System.unique_integer()}@example.com",
-          password: "secure_password_123",
           role: "member"
-        })
+        )
 
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      member_token = access_token_for(member)
 
       conn =
         build_conn()
@@ -116,7 +105,27 @@ defmodule RicqchetWeb.ChannelNamespaceControllerTest do
         |> put_req_header("content-type", "application/json")
         |> post("/v1/applications/#{app.id}/channel-namespaces", %{"pattern" => "test-*"})
 
-      assert json_response(conn, 403)
+      response = json_response(conn, 201)
+      assert response["data"]["pattern"] == "test-*"
+    end
+
+    test "returns 403 for viewer user", %{tenant: tenant, application: app} do
+      {:ok, %{user: viewer}} =
+        create_tenant_and_user(
+          tenant: tenant,
+          email: "viewer#{System.unique_integer()}@example.com",
+          role: "viewer"
+        )
+
+      viewer_token = access_token_for(viewer)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{viewer_token}")
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/applications/#{app.id}/channel-namespaces", %{"pattern" => "test-*"})
+
+      assert json_response(conn, 403)["error"] == "forbidden"
     end
   end
 
@@ -158,6 +167,55 @@ defmodule RicqchetWeb.ChannelNamespaceControllerTest do
 
       assert json_response(conn, 422)
     end
+
+    test "allows member to update a namespace", %{tenant: tenant, application: app} do
+      {:ok, namespace} =
+        Namespaces.create_namespace(%{pattern: "chat-*", priority: 1}, app.id, tenant.id)
+
+      {:ok, %{user: member}} =
+        create_tenant_and_user(
+          tenant: tenant,
+          email: "member#{System.unique_integer()}@example.com",
+          role: "member"
+        )
+
+      member_token = access_token_for(member)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> patch("/v1/applications/#{app.id}/channel-namespaces/#{namespace.id}", %{
+          "priority" => 20
+        })
+
+      response = json_response(conn, 200)
+      assert response["data"]["priority"] == 20
+    end
+
+    test "returns 403 for viewer user", %{tenant: tenant, application: app} do
+      {:ok, namespace} =
+        Namespaces.create_namespace(%{pattern: "chat-*", priority: 1}, app.id, tenant.id)
+
+      {:ok, %{user: viewer}} =
+        create_tenant_and_user(
+          tenant: tenant,
+          email: "viewer#{System.unique_integer()}@example.com",
+          role: "viewer"
+        )
+
+      viewer_token = access_token_for(viewer)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{viewer_token}")
+        |> put_req_header("content-type", "application/json")
+        |> patch("/v1/applications/#{app.id}/channel-namespaces/#{namespace.id}", %{
+          "priority" => 20
+        })
+
+      assert json_response(conn, 403)["error"] == "forbidden"
+    end
   end
 
   describe "DELETE /v1/applications/:app_id/channel-namespaces/:id" do
@@ -176,6 +234,51 @@ defmodule RicqchetWeb.ChannelNamespaceControllerTest do
         delete(conn, "/v1/applications/#{app.id}/channel-namespaces/#{Ecto.UUID.generate()}")
 
       assert json_response(conn, 404)
+    end
+
+    test "allows member to delete a namespace", %{tenant: tenant, application: app} do
+      {:ok, namespace} =
+        Namespaces.create_namespace(%{pattern: "delete-me"}, app.id, tenant.id)
+
+      {:ok, %{user: member}} =
+        create_tenant_and_user(
+          tenant: tenant,
+          email: "member#{System.unique_integer()}@example.com",
+          role: "member"
+        )
+
+      member_token = access_token_for(member)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> delete("/v1/applications/#{app.id}/channel-namespaces/#{namespace.id}")
+
+      assert response(conn, 204)
+      assert Namespaces.get_namespace(namespace.id, app.id) == nil
+    end
+
+    test "returns 403 for viewer user", %{tenant: tenant, application: app} do
+      {:ok, namespace} =
+        Namespaces.create_namespace(%{pattern: "delete-me"}, app.id, tenant.id)
+
+      {:ok, %{user: viewer}} =
+        create_tenant_and_user(
+          tenant: tenant,
+          email: "viewer#{System.unique_integer()}@example.com",
+          role: "viewer"
+        )
+
+      viewer_token = access_token_for(viewer)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{viewer_token}")
+        |> put_req_header("content-type", "application/json")
+        |> delete("/v1/applications/#{app.id}/channel-namespaces/#{namespace.id}")
+
+      assert json_response(conn, 403)["error"] == "forbidden"
     end
   end
 end

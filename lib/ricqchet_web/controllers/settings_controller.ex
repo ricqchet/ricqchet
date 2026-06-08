@@ -2,6 +2,7 @@ defmodule RicqchetWeb.SettingsController do
   use RicqchetWeb, :controller
 
   alias Ricqchet.Auth
+  alias Ricqchet.Authorization
   alias Ricqchet.Tenants
 
   plug :put_layout, html: {RicqchetWeb.Layouts, :app}
@@ -15,6 +16,16 @@ defmodule RicqchetWeb.SettingsController do
   end
 
   def update_tenant(conn, %{"name" => name}) do
+    if Authorization.can?(conn.assigns.current_user, :manage_settings) do
+      do_update_tenant(conn, name)
+    else
+      conn
+      |> put_flash(:error, "Only admins can change organization settings.")
+      |> redirect(to: ~p"/settings")
+    end
+  end
+
+  defp do_update_tenant(conn, name) do
     case Tenants.update_tenant(conn.assigns.current_tenant, %{name: name}) do
       {:ok, _tenant} ->
         conn

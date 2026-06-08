@@ -7,8 +7,8 @@ defmodule RicqchetWeb.ApiKeyController do
 
   ## Authorization
 
-  - **List/Create**: Any authenticated tenant member (admin, member, or viewer can list; admin only for create)
-  - **Revoke/Rotate**: Tenant admin only
+  - **List**: Any authenticated user (admin, member, or viewer)
+  - **Create/Revoke/Rotate**: Member or admin
 
   ## Security
 
@@ -23,7 +23,7 @@ defmodule RicqchetWeb.ApiKeyController do
   alias OpenApiSpex.Schema
   alias Ricqchet.ApiKeys
   alias Ricqchet.Applications
-  alias Ricqchet.Users.User
+  alias Ricqchet.Authorization
   alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
@@ -70,7 +70,7 @@ defmodule RicqchetWeb.ApiKeyController do
     description: """
     Creates a new API key for an application.
 
-    **Requires admin role.**
+    **Requires member or admin role.**
 
     **Important:** The full API key is only returned in this response.
     Store it securely - it will not be shown again.
@@ -99,7 +99,7 @@ defmodule RicqchetWeb.ApiKeyController do
   @doc """
   Creates a new API key for an application.
 
-  Requires admin role.
+  Requires member or admin role.
   """
   def create(conn, %{"application_id" => application_id} = params) do
     user = conn.assigns.current_user
@@ -108,7 +108,7 @@ defmodule RicqchetWeb.ApiKeyController do
     # Only allow documented request-body fields to prevent status override
     attrs = Map.take(params, ["name", "expires_at"])
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :editor),
          {:ok, application} <- get_application_or_error(tenant, application_id),
          {:ok, api_key} <- ApiKeys.create_api_key(application, attrs) do
       conn
@@ -122,7 +122,7 @@ defmodule RicqchetWeb.ApiKeyController do
     description: """
     Revokes an API key immediately.
 
-    **Requires admin role.**
+    **Requires member or admin role.**
 
     **Warning:** This action cannot be undone. Any requests using this key
     will immediately fail authentication.
@@ -143,13 +143,13 @@ defmodule RicqchetWeb.ApiKeyController do
   @doc """
   Revokes an API key.
 
-  Requires admin role.
+  Requires member or admin role.
   """
   def delete(conn, %{"id" => id}) do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :editor),
          {:ok, api_key} <- get_api_key_or_error(tenant, id),
          {:ok, revoked_key} <- ApiKeys.revoke_api_key(api_key) do
       render(conn, :revoked, api_key: revoked_key)
@@ -161,7 +161,7 @@ defmodule RicqchetWeb.ApiKeyController do
     description: """
     Rotates an API key by revoking the old key and creating a new one atomically.
 
-    **Requires admin role.**
+    **Requires member or admin role.**
 
     **Important:** The full new API key is only returned in this response.
     Store it securely - it will not be shown again.
@@ -190,23 +190,18 @@ defmodule RicqchetWeb.ApiKeyController do
   @doc """
   Rotates an API key (revokes old, creates new).
 
-  Requires admin role.
+  Requires member or admin role.
   """
   def rotate(conn, %{"id" => id}) do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :editor),
          {:ok, api_key} <- get_api_key_or_error(tenant, id),
          {:ok, {revoked_key, new_api_key}} <- ApiKeys.rotate_api_key(api_key) do
       render(conn, :rotated, old_api_key: revoked_key, new_api_key: new_api_key)
     end
   end
-
-  # Authorization helpers
-
-  defp authorize_admin(%User{role: "admin"}), do: :ok
-  defp authorize_admin(_user), do: {:error, :forbidden}
 
   # Resource helpers
 

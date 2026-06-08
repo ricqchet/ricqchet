@@ -17,14 +17,6 @@ defmodule RicqchetWeb.PageController do
     end
   end
 
-  def register(conn, _params) do
-    if conn.assigns[:current_user] do
-      redirect(conn, to: ~p"/dashboard")
-    else
-      render(conn, :register, page_title: "Create account", error: nil, errors: %{})
-    end
-  end
-
   def forgot_password(conn, _params) do
     render(conn, :forgot_password, page_title: "Forgot password", submitted: false)
   end
@@ -37,13 +29,5 @@ defmodule RicqchetWeb.PageController do
 
   def reset_password(conn, _params) do
     render(conn, :reset_password, page_title: "Reset password")
-  end
-
-  def verify_email(conn, _params) do
-    render(conn, :verify_email, page_title: "Verify email")
-  end
-
-  def accept_invite(conn, _params) do
-    render(conn, :accept_invite, page_title: "Accept invitation")
   end
 end

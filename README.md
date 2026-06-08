@@ -7,7 +7,8 @@ Ricqchet allows serverless functions to POST events that are queued and delivere
 ## Features
 
 - **Guaranteed delivery** with automatic retries and exponential backoff
-- **Multi-tenant** API key authentication
+- **Self-hosted**, single-organization with role-based access (admin/member/viewer)
+- **API key authentication** for the relay API
 - **Deduplication** to prevent duplicate message processing
 - **Delayed delivery** with configurable scheduling
 - **Message status tracking** with detailed attempt history
@@ -48,13 +49,34 @@ mix setup
 mix phx.server
 ```
 
-### Create a Tenant
+### First-Run Setup
 
-```elixir
-# In iex -S mix
-{:ok, tenant} = Ricqchet.Tenants.create_tenant(%{name: "My App"})
-# Save the api_key - it's only shown once!
-tenant.api_key
+Ricqchet is **self-hosted and single-organization** — there is no public sign-up.
+On first run (`mix setup` / `mix ecto.setup`) it creates one default organization
+and an initial **admin** user, printing the credentials to the console.
+
+Configure the admin via environment variables (optional):
+
+```bash
+ADMIN_EMAIL=admin@yourco.com ADMIN_PASSWORD=a-strong-password mix ecto.setup
+```
+
+If `ADMIN_PASSWORD` is unset, a secure password is generated and printed once.
+**Sign in at `/login` and change it immediately** (Settings → Change password).
+Locked out? Reset it without email:
+
+```bash
+mix ricqchet.reset_admin_password admin@yourco.com
+```
+
+Admins create additional users (`member` / `viewer` roles) from the **Team** page
+or the API — see [Authentication](docs/authentication.md).
+
+For production releases:
+
+```bash
+bin/ricqchet eval "Ricqchet.Release.migrate()"
+bin/ricqchet eval "Ricqchet.Release.seed()"
 ```
 
 ## API Reference
@@ -238,7 +260,7 @@ When Ricqchet delivers a message, it includes these headers:
 
 - [Overview](docs/overview.md) - What Ricqchet is and how it works
 - [API Reference](docs/api-reference.md) - Endpoints, headers, and examples
-- [Authentication](docs/authentication.md) - Multi-tenant setup and API keys
+- [Authentication](docs/authentication.md) - Users, roles, and API keys
 - [Batching](docs/batching.md) - Message batching configuration
 - [Delivery](docs/delivery.md) - Retry behavior and delivered headers
 - [Configuration](docs/configuration.md) - Application configuration

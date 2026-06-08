@@ -6,7 +6,6 @@ defmodule Ricqchet.Tenants do
   import Ecto.Query
 
   alias Ricqchet.Repo
-  alias Ricqchet.Tenants.Invitation
   alias Ricqchet.Tenants.Tenant
   alias Ricqchet.Users.User
 
@@ -56,82 +55,6 @@ defmodule Ricqchet.Tenants do
   """
   def list_tenants do
     Repo.all(Tenant)
-  end
-
-  # Invitation functions
-
-  @doc """
-  Creates an invitation to join a tenant.
-
-  The invitation includes a token that can be used to accept the invitation.
-  The token is returned in the virtual field and should be sent to the invitee.
-
-  ## Parameters
-
-  - tenant: The tenant to invite the user to
-  - params: Map containing email, role, and optionally invited_by_id
-
-  ## Examples
-
-      iex> invite_user(tenant, %{"email" => "new@example.com", "role" => "member"})
-      {:ok, %Invitation{token: "..."}}
-
-  """
-  def invite_user(%Tenant{} = tenant, %User{} = invited_by, params) do
-    %Invitation{}
-    |> Invitation.create_changeset(tenant, invited_by, params)
-    |> Repo.insert()
-  end
-
-  def invite_user(%Tenant{} = tenant, params) do
-    # When no invited_by user is provided (e.g., system-generated invitations)
-    %Invitation{}
-    |> Invitation.create_changeset(tenant, nil, params)
-    |> Repo.insert()
-  end
-
-  @doc """
-  Gets an invitation by its token.
-  """
-  def get_invitation_by_token(token) when is_binary(token) do
-    token_hash = Invitation.hash_token(token)
-
-    Invitation
-    |> where([i], i.token_hash == ^token_hash)
-    |> Repo.one()
-  end
-
-  @doc """
-  Gets an invitation by ID.
-  """
-  def get_invitation(id), do: Repo.get(Invitation, id)
-
-  @doc """
-  Marks an invitation as accepted.
-  """
-  def accept_invitation(%Invitation{} = invitation) do
-    invitation
-    |> Invitation.accept_changeset()
-    |> Repo.update()
-  end
-
-  @doc """
-  Revokes an invitation.
-  """
-  def revoke_invitation(%Invitation{} = invitation) do
-    invitation
-    |> Invitation.revoke_changeset()
-    |> Repo.update()
-  end
-
-  @doc """
-  Lists pending invitations for a tenant.
-  """
-  def list_pending_invitations(%Tenant{id: tenant_id}) do
-    Invitation
-    |> where([i], i.tenant_id == ^tenant_id and i.status == "pending")
-    |> order_by([i], desc: i.inserted_at)
-    |> Repo.all()
   end
 
   # User management functions

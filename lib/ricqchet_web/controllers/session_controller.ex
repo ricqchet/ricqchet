@@ -3,27 +3,6 @@ defmodule RicqchetWeb.SessionController do
 
   alias Ricqchet.Auth
 
-  def register(conn, %{"tenant_name" => tenant_name, "email" => email, "password" => password}) do
-    attrs = %{"tenant_name" => tenant_name, "email" => email, "password" => password}
-
-    case Auth.register_user(attrs) do
-      {:ok, _result} ->
-        conn
-        |> put_flash(:info, "Account created! Please check your email to verify.")
-        |> redirect(to: ~p"/login")
-
-      {:error, _step, changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> put_view(RicqchetWeb.PageHTML)
-        |> render(:register,
-          page_title: "Create account",
-          error: format_changeset_errors(changeset),
-          errors: %{}
-        )
-    end
-  end
-
   def create(conn, %{"email" => email, "password" => password}) do
     case Auth.login(email, password) do
       {:ok, %{user: user}} ->
@@ -53,15 +32,5 @@ defmodule RicqchetWeb.SessionController do
     |> put_status(:unauthorized)
     |> put_view(RicqchetWeb.PageHTML)
     |> render(:login, page_title: "Log in", error: error)
-  end
-
-  defp format_changeset_errors(changeset) do
-    changeset
-    |> Ecto.Changeset.traverse_errors(fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {key, value}, acc ->
-        String.replace(acc, "%{#{key}}", to_string(value))
-      end)
-    end)
-    |> Enum.map_join("; ", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
   end
 end

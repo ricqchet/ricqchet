@@ -14,8 +14,8 @@ defmodule RicqchetWeb.TenantController do
   use OpenApiSpex.ControllerSpecs
 
   alias OpenApiSpex.Schema
+  alias Ricqchet.Authorization
   alias Ricqchet.Tenants
-  alias Ricqchet.Users.User
   alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
@@ -43,7 +43,7 @@ defmodule RicqchetWeb.TenantController do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    render(conn, :show, tenant: tenant, is_admin: user.role == "admin")
+    render(conn, :show, tenant: tenant, is_admin: Authorization.admin?(user))
   end
 
   operation(:update,
@@ -70,7 +70,7 @@ defmodule RicqchetWeb.TenantController do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :admin),
          {:ok, updated_tenant} <- Tenants.update_tenant(tenant, params) do
       render(conn, :show, tenant: updated_tenant, is_admin: true)
     end
@@ -122,9 +122,4 @@ defmodule RicqchetWeb.TenantController do
 
     render(conn, :signing_secret, signing_secret: tenant.signing_secret)
   end
-
-  # Authorization helpers
-
-  defp authorize_admin(%User{role: "admin"}), do: :ok
-  defp authorize_admin(_user), do: {:error, :forbidden}
 end

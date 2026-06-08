@@ -3,25 +3,13 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
 
   alias Ricqchet.ApiKeys
   alias Ricqchet.Applications
-  alias Ricqchet.Auth
-  alias Ricqchet.Auth.Token
-  alias Ricqchet.Repo
-  alias Ricqchet.Users
 
   setup %{conn: conn} do
-    # Create and verify an admin user
-    {:ok, %{user: _user, verification_token: token}} =
-      Auth.register_user(%{
-        "email" => "admin#{System.unique_integer()}@example.com",
-        "password" => "secure_password_123",
-        "tenant_name" => "Test Org #{System.unique_integer()}"
-      })
+    # Create an admin user
+    {:ok, %{user: user, tenant: tenant}} =
+      create_tenant_and_user(email: "admin#{System.unique_integer()}@example.com")
 
-    {:ok, verified_user} = Auth.verify_email(token)
-    {:ok, access_token, _claims} = Token.generate_access_token(verified_user)
-
-    user = Repo.preload(verified_user, :tenant)
-    tenant = user.tenant
+    access_token = access_token_for(user)
 
     # Create a test application with an API key
     {:ok, application} = Applications.create_application(tenant, %{name: "Test Application"})
@@ -94,16 +82,8 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
 
     test "returns 404 for application belonging to another tenant", %{conn: conn} do
       # Create another tenant with application
-      {:ok, %{user: _other_user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "other#{System.unique_integer()}@example.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Other Org"
-        })
-
-      {:ok, verified_other_user} = Auth.verify_email(token)
-      other_user = Repo.preload(verified_other_user, :tenant)
-      {:ok, other_app} = Applications.create_application(other_user.tenant, %{name: "Other App"})
+      {:ok, %{tenant: other_tenant}} = create_tenant_and_user()
+      {:ok, other_app} = Applications.create_application(other_tenant, %{name: "Other App"})
 
       conn = get(conn, "/v1/applications/#{other_app.id}/api-keys")
 
@@ -120,19 +100,26 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
     end
 
     test "allows member role to list API keys", %{tenant: tenant, application: application} do
-      {:ok, unconfirmed_member} =
-        Users.create_user(tenant, %{
-          email: "member_list#{System.unique_integer()}@example.com",
-          password: "secure_password_123",
-          role: "member"
-        })
-
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      {:ok, %{user: member}} = create_tenant_and_user(tenant: tenant, role: "member")
+      member_token = access_token_for(member)
 
       conn =
         build_conn()
         |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> get("/v1/applications/#{application.id}/api-keys")
+
+      response = json_response(conn, 200)
+      assert is_list(response["data"])
+    end
+
+    test "allows viewer role to list API keys", %{tenant: tenant, application: application} do
+      {:ok, %{user: viewer}} = create_tenant_and_user(tenant: tenant, role: "viewer")
+      viewer_token = access_token_for(viewer)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{viewer_token}")
         |> put_req_header("content-type", "application/json")
         |> get("/v1/applications/#{application.id}/api-keys")
 
@@ -212,16 +199,8 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
     end
 
     test "returns 404 for application belonging to another tenant", %{conn: conn} do
-      {:ok, %{user: _other_user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "other_create#{System.unique_integer()}@example.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Other Org Create"
-        })
-
-      {:ok, verified_other_user} = Auth.verify_email(token)
-      other_user = Repo.preload(verified_other_user, :tenant)
-      {:ok, other_app} = Applications.create_application(other_user.tenant, %{name: "Other App"})
+      {:ok, %{tenant: other_tenant}} = create_tenant_and_user()
+      {:ok, other_app} = Applications.create_application(other_tenant, %{name: "Other App"})
 
       conn =
         post(conn, "/v1/applications/#{other_app.id}/api-keys", %{
@@ -240,20 +219,28 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
       assert json_response(conn, 401)["error"] == "unauthorized"
     end
 
-    test "returns 403 for non-admin user", %{tenant: tenant, application: application} do
-      {:ok, unconfirmed_member} =
-        Users.create_user(tenant, %{
-          email: "member_create#{System.unique_integer()}@example.com",
-          password: "secure_password_123",
-          role: "member"
-        })
-
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+    test "allows member role to create API key", %{tenant: tenant, application: application} do
+      {:ok, %{user: member}} = create_tenant_and_user(tenant: tenant, role: "member")
+      member_token = access_token_for(member)
 
       conn =
         build_conn()
         |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/applications/#{application.id}/api-keys", %{name: "Member Key"})
+
+      response = json_response(conn, 201)
+      assert response["id"]
+      assert response["name"] == "Member Key"
+    end
+
+    test "returns 403 for viewer role", %{tenant: tenant, application: application} do
+      {:ok, %{user: viewer}} = create_tenant_and_user(tenant: tenant, role: "viewer")
+      viewer_token = access_token_for(viewer)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{viewer_token}")
         |> put_req_header("content-type", "application/json")
         |> post("/v1/applications/#{application.id}/api-keys", %{name: "Not Allowed"})
 
@@ -297,16 +284,8 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
     end
 
     test "returns 404 for key belonging to another tenant", %{conn: conn} do
-      {:ok, %{user: _other_user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "other_revoke#{System.unique_integer()}@example.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Other Org Revoke"
-        })
-
-      {:ok, verified_other_user} = Auth.verify_email(token)
-      other_user = Repo.preload(verified_other_user, :tenant)
-      {:ok, other_app} = Applications.create_application(other_user.tenant, %{name: "Other App"})
+      {:ok, %{tenant: other_tenant}} = create_tenant_and_user()
+      {:ok, other_app} = Applications.create_application(other_tenant, %{name: "Other App"})
       {:ok, other_key} = ApiKeys.create_api_key(other_app, %{name: "Other Key"})
 
       conn = delete(conn, "/v1/api-keys/#{other_key.id}")
@@ -323,22 +302,32 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
       assert json_response(conn, 401)["error"] == "unauthorized"
     end
 
-    test "returns 403 for non-admin user", %{tenant: tenant, application: application} do
-      {:ok, key} = ApiKeys.create_api_key(application, %{name: "To Not Revoke"})
+    test "allows member role to revoke API key", %{tenant: tenant, application: application} do
+      {:ok, key} = ApiKeys.create_api_key(application, %{name: "Member Revoke"})
 
-      {:ok, unconfirmed_member} =
-        Users.create_user(tenant, %{
-          email: "member_revoke#{System.unique_integer()}@example.com",
-          password: "secure_password_123",
-          role: "member"
-        })
-
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      {:ok, %{user: member}} = create_tenant_and_user(tenant: tenant, role: "member")
+      member_token = access_token_for(member)
 
       conn =
         build_conn()
         |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> delete("/v1/api-keys/#{key.id}")
+
+      response = json_response(conn, 200)
+      assert response["id"] == key.id
+      assert response["status"] == "revoked"
+    end
+
+    test "returns 403 for viewer role", %{tenant: tenant, application: application} do
+      {:ok, key} = ApiKeys.create_api_key(application, %{name: "To Not Revoke"})
+
+      {:ok, %{user: viewer}} = create_tenant_and_user(tenant: tenant, role: "viewer")
+      viewer_token = access_token_for(viewer)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{viewer_token}")
         |> put_req_header("content-type", "application/json")
         |> delete("/v1/api-keys/#{key.id}")
 
@@ -404,16 +393,8 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
     end
 
     test "returns 404 for key belonging to another tenant", %{conn: conn} do
-      {:ok, %{user: _other_user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "other_rotate#{System.unique_integer()}@example.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Other Org Rotate"
-        })
-
-      {:ok, verified_other_user} = Auth.verify_email(token)
-      other_user = Repo.preload(verified_other_user, :tenant)
-      {:ok, other_app} = Applications.create_application(other_user.tenant, %{name: "Other App"})
+      {:ok, %{tenant: other_tenant}} = create_tenant_and_user()
+      {:ok, other_app} = Applications.create_application(other_tenant, %{name: "Other App"})
       {:ok, other_key} = ApiKeys.create_api_key(other_app, %{name: "Other Key"})
 
       conn = post(conn, "/v1/api-keys/#{other_key.id}/rotate")
@@ -430,22 +411,32 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
       assert json_response(conn, 401)["error"] == "unauthorized"
     end
 
-    test "returns 403 for non-admin user", %{tenant: tenant, application: application} do
-      {:ok, key} = ApiKeys.create_api_key(application, %{name: "To Not Rotate"})
+    test "allows member role to rotate API key", %{tenant: tenant, application: application} do
+      {:ok, key} = ApiKeys.create_api_key(application, %{name: "Member Rotate"})
 
-      {:ok, unconfirmed_member} =
-        Users.create_user(tenant, %{
-          email: "member_rotate#{System.unique_integer()}@example.com",
-          password: "secure_password_123",
-          role: "member"
-        })
-
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      {:ok, %{user: member}} = create_tenant_and_user(tenant: tenant, role: "member")
+      member_token = access_token_for(member)
 
       conn =
         build_conn()
         |> put_req_header("authorization", "Bearer #{member_token}")
+        |> put_req_header("content-type", "application/json")
+        |> post("/v1/api-keys/#{key.id}/rotate")
+
+      response = json_response(conn, 200)
+      assert response["old_api_key"]["id"] == key.id
+      assert response["new_api_key"]["id"] != key.id
+    end
+
+    test "returns 403 for viewer role", %{tenant: tenant, application: application} do
+      {:ok, key} = ApiKeys.create_api_key(application, %{name: "To Not Rotate"})
+
+      {:ok, %{user: viewer}} = create_tenant_and_user(tenant: tenant, role: "viewer")
+      viewer_token = access_token_for(viewer)
+
+      conn =
+        build_conn()
+        |> put_req_header("authorization", "Bearer #{viewer_token}")
         |> put_req_header("content-type", "application/json")
         |> post("/v1/api-keys/#{key.id}/rotate")
 

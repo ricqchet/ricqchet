@@ -2,7 +2,7 @@
   Applications
   <:subtitle>Manage your webhook applications</:subtitle>
   <:actions>
-    <.button phx-click="show_create_modal">
+    <.button :if={can?(@current_user, :write)} phx-click="show_create_modal">
       <span class="hero-plus-mini mr-1 h-4 w-4" /> New application
     </.button>
   </:actions>
@@ -25,7 +25,13 @@
         {Calendar.strftime(app.inserted_at, "%b %d, %Y")}
       </:col>
       <:col :let={app} label="" class="text-right">
-        <.button variant="ghost" phx-click="confirm_delete" phx-value-id={app.id} class="text-xs">
+        <.button
+          :if={can?(@current_user, :write)}
+          variant="ghost"
+          phx-click="confirm_delete"
+          phx-value-id={app.id}
+          class="text-xs"
+        >
           <span class="hero-trash-mini h-4 w-4 text-[hsl(var(--destructive))]" />
         </.button>
       </:col>

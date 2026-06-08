@@ -1,55 +1,25 @@
 defmodule RicqchetWeb.TenantUserControllerTest do
   use RicqchetWeb.ConnCase, async: false
 
-  alias Ricqchet.Auth
-  alias Ricqchet.Auth.Token
-  alias Ricqchet.Repo
-  alias Ricqchet.Tenants
   alias Ricqchet.Users
 
   describe "GET /v1/tenant/users" do
     setup do
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "admin@users-test.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Users Test Org"
-        })
+      {:ok, %{user: admin, tenant: tenant}} =
+        create_tenant_and_user(email: "admin@users-test.com")
 
-      {:ok, unloaded_admin} = Auth.verify_email(token)
-      admin = Repo.preload(unloaded_admin, :tenant)
-      {:ok, admin_token, _claims} = Token.generate_access_token(admin)
+      admin_token = access_token_for(admin)
 
-      # Create additional users
-      {:ok, unconfirmed_member} =
-        Users.create_user(admin.tenant, %{
-          "email" => "member@users-test.com",
-          "password" => "secure_password_123",
-          "role" => "member"
-        })
+      {:ok, %{user: _member}} =
+        create_tenant_and_user(tenant: tenant, email: "member@users-test.com", role: "member")
 
-      {:ok, _member} = Users.confirm_user(unconfirmed_member)
+      {:ok, %{user: _viewer}} =
+        create_tenant_and_user(tenant: tenant, email: "viewer@users-test.com", role: "viewer")
 
-      {:ok, unconfirmed_viewer} =
-        Users.create_user(admin.tenant, %{
-          "email" => "viewer@users-test.com",
-          "password" => "secure_password_123",
-          "role" => "viewer"
-        })
-
-      {:ok, _viewer} = Users.confirm_user(unconfirmed_viewer)
-
-      %{
-        admin: admin,
-        admin_token: admin_token,
-        tenant: admin.tenant
-      }
+      %{admin: admin, admin_token: admin_token, tenant: tenant}
     end
 
-    test "lists all users in tenant", %{
-      conn: conn,
-      admin_token: token
-    } do
+    test "lists all users in tenant", %{conn: conn, admin_token: token} do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
@@ -67,10 +37,7 @@ defmodule RicqchetWeb.TenantUserControllerTest do
       assert "viewer@users-test.com" in emails
     end
 
-    test "supports pagination", %{
-      conn: conn,
-      admin_token: token
-    } do
+    test "supports pagination", %{conn: conn, admin_token: token} do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
@@ -94,97 +61,92 @@ defmodule RicqchetWeb.TenantUserControllerTest do
     end
   end
 
-  describe "POST /v1/tenant/users/invite" do
+  describe "POST /v1/tenant/users" do
     setup do
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "admin@invite-test.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Invite Test Org"
-        })
+      {:ok, %{user: admin, tenant: tenant}} =
+        create_tenant_and_user(email: "admin@create-test.com")
 
-      {:ok, unloaded_admin} = Auth.verify_email(token)
-      admin = Repo.preload(unloaded_admin, :tenant)
-      {:ok, admin_token, _claims} = Token.generate_access_token(admin)
+      admin_token = access_token_for(admin)
 
-      # Create a member user
-      {:ok, unconfirmed_member} =
-        Users.create_user(admin.tenant, %{
-          "email" => "member@invite-test.com",
-          "password" => "secure_password_123",
-          "role" => "member"
-        })
+      {:ok, %{user: member}} =
+        create_tenant_and_user(tenant: tenant, email: "member@create-test.com", role: "member")
 
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      member_token = access_token_for(member)
 
-      %{
-        admin: admin,
-        admin_token: admin_token,
-        member_token: member_token,
-        tenant: admin.tenant
-      }
+      %{admin: admin, admin_token: admin_token, member_token: member_token, tenant: tenant}
     end
 
-    test "admin can invite a new user", %{
-      conn: conn,
-      admin_token: token
-    } do
+    test "admin can create a user with a generated password", %{conn: conn, admin_token: token} do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
         |> put_req_header("authorization", "Bearer #{token}")
-        |> post("/v1/tenant/users/invite", %{
-          "email" => "newuser@example.com",
-          "role" => "member"
-        })
+        |> post("/v1/tenant/users", %{"email" => "newuser@example.com", "role" => "member"})
 
       response = json_response(conn, 201)
 
       assert response["email"] == "newuser@example.com"
       assert response["role"] == "member"
-      assert response["status"] == "pending"
-      assert response["expires_at"]
+      assert response["status"] == "active"
+      # A one-time password is generated and returned when none is supplied
+      assert is_binary(response["password"])
     end
 
-    test "member cannot invite users", %{
+    test "admin can create a user with a supplied password (not echoed)", %{
       conn: conn,
-      member_token: token
+      admin_token: token
     } do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
         |> put_req_header("authorization", "Bearer #{token}")
-        |> post("/v1/tenant/users/invite", %{
-          "email" => "newuser@example.com",
-          "role" => "member"
+        |> post("/v1/tenant/users", %{
+          "email" => "supplied@example.com",
+          "role" => "viewer",
+          "password" => "supplied_password_123"
         })
+
+      response = json_response(conn, 201)
+
+      assert response["email"] == "supplied@example.com"
+      assert response["role"] == "viewer"
+      refute Map.has_key?(response, "password")
+    end
+
+    test "member cannot create users", %{conn: conn, member_token: token} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/v1/tenant/users", %{"email" => "newuser@example.com", "role" => "member"})
 
       assert json_response(conn, 403)
     end
 
-    test "cannot invite with duplicate email in same tenant", %{
-      conn: conn,
-      admin_token: token
-    } do
-      # First invitation
+    test "returns 409 for duplicate email", %{conn: conn, admin_token: token} do
+      # First creation
       conn
       |> put_req_header("content-type", "application/json")
       |> put_req_header("authorization", "Bearer #{token}")
-      |> post("/v1/tenant/users/invite", %{
-        "email" => "duplicate@example.com",
-        "role" => "member"
-      })
+      |> post("/v1/tenant/users", %{"email" => "duplicate@example.com", "role" => "member"})
 
-      # Second invitation with same email
+      # Second creation with the same email
       conn =
         build_conn()
         |> put_req_header("content-type", "application/json")
         |> put_req_header("authorization", "Bearer #{token}")
-        |> post("/v1/tenant/users/invite", %{
-          "email" => "duplicate@example.com",
-          "role" => "member"
-        })
+        |> post("/v1/tenant/users", %{"email" => "duplicate@example.com", "role" => "member"})
+
+      response = json_response(conn, 409)
+      assert response["error"] == "user_already_exists"
+    end
+
+    test "returns 422 for invalid params", %{conn: conn, admin_token: token} do
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/v1/tenant/users", %{"email" => "not-an-email", "role" => "member"})
 
       assert json_response(conn, 422)
     end
@@ -193,10 +155,7 @@ defmodule RicqchetWeb.TenantUserControllerTest do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
-        |> post("/v1/tenant/users/invite", %{
-          "email" => "newuser@example.com",
-          "role" => "member"
-        })
+        |> post("/v1/tenant/users", %{"email" => "newuser@example.com", "role" => "member"})
 
       assert json_response(conn, 401)
     end
@@ -204,37 +163,16 @@ defmodule RicqchetWeb.TenantUserControllerTest do
 
   describe "PATCH /v1/tenant/users/:id" do
     setup do
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "admin@role-test.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Role Test Org"
-        })
+      {:ok, %{user: admin, tenant: tenant}} = create_tenant_and_user(email: "admin@role-test.com")
+      admin_token = access_token_for(admin)
 
-      {:ok, unloaded_admin} = Auth.verify_email(token)
-      admin = Repo.preload(unloaded_admin, :tenant)
-      {:ok, admin_token, _claims} = Token.generate_access_token(admin)
+      {:ok, %{user: admin2}} =
+        create_tenant_and_user(tenant: tenant, email: "admin2@role-test.com", role: "admin")
 
-      # Create another admin
-      {:ok, unconfirmed_admin2} =
-        Users.create_user(admin.tenant, %{
-          "email" => "admin2@role-test.com",
-          "password" => "secure_password_123",
-          "role" => "admin"
-        })
+      {:ok, %{user: member}} =
+        create_tenant_and_user(tenant: tenant, email: "member@role-test.com", role: "member")
 
-      {:ok, admin2} = Users.confirm_user(unconfirmed_admin2)
-
-      # Create a member user
-      {:ok, unconfirmed_member} =
-        Users.create_user(admin.tenant, %{
-          "email" => "member@role-test.com",
-          "password" => "secure_password_123",
-          "role" => "member"
-        })
-
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      member_token = access_token_for(member)
 
       %{
         admin: admin,
@@ -242,15 +180,11 @@ defmodule RicqchetWeb.TenantUserControllerTest do
         admin_token: admin_token,
         member: member,
         member_token: member_token,
-        tenant: admin.tenant
+        tenant: tenant
       }
     end
 
-    test "admin can update user role", %{
-      conn: conn,
-      admin_token: token,
-      member: member
-    } do
+    test "admin can update user role", %{conn: conn, admin_token: token, member: member} do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
@@ -278,11 +212,7 @@ defmodule RicqchetWeb.TenantUserControllerTest do
       assert response["role"] == "member"
     end
 
-    test "member cannot update roles", %{
-      conn: conn,
-      member_token: token,
-      admin: admin
-    } do
+    test "member cannot update roles", %{conn: conn, member_token: token, admin: admin} do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
@@ -292,10 +222,7 @@ defmodule RicqchetWeb.TenantUserControllerTest do
       assert json_response(conn, 403)
     end
 
-    test "returns 404 for non-existent user", %{
-      conn: conn,
-      admin_token: token
-    } do
+    test "returns 404 for non-existent user", %{conn: conn, admin_token: token} do
       fake_id = Ecto.UUID.generate()
 
       conn =
@@ -319,29 +246,13 @@ defmodule RicqchetWeb.TenantUserControllerTest do
 
   describe "PATCH /v1/tenant/users/:id - last admin protection" do
     setup do
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "only-admin@test.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Single Admin Org"
-        })
+      {:ok, %{user: admin}} = create_tenant_and_user(email: "only-admin@test.com")
+      admin_token = access_token_for(admin)
 
-      {:ok, unloaded_admin} = Auth.verify_email(token)
-      admin = Repo.preload(unloaded_admin, :tenant)
-      {:ok, admin_token, _claims} = Token.generate_access_token(admin)
-
-      %{
-        admin: admin,
-        admin_token: admin_token,
-        tenant: admin.tenant
-      }
+      %{admin: admin, admin_token: admin_token}
     end
 
-    test "cannot demote last admin", %{
-      conn: conn,
-      admin_token: token,
-      admin: admin
-    } do
+    test "cannot demote last admin", %{conn: conn, admin_token: token, admin: admin} do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
@@ -355,42 +266,26 @@ defmodule RicqchetWeb.TenantUserControllerTest do
 
   describe "DELETE /v1/tenant/users/:id" do
     setup do
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "admin@delete-test.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Delete Test Org"
-        })
+      {:ok, %{user: admin, tenant: tenant}} =
+        create_tenant_and_user(email: "admin@delete-test.com")
 
-      {:ok, unloaded_admin} = Auth.verify_email(token)
-      admin = Repo.preload(unloaded_admin, :tenant)
-      {:ok, admin_token, _claims} = Token.generate_access_token(admin)
+      admin_token = access_token_for(admin)
 
-      # Create a member user
-      {:ok, unconfirmed_member} =
-        Users.create_user(admin.tenant, %{
-          "email" => "member@delete-test.com",
-          "password" => "secure_password_123",
-          "role" => "member"
-        })
+      {:ok, %{user: member}} =
+        create_tenant_and_user(tenant: tenant, email: "member@delete-test.com", role: "member")
 
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      member_token = access_token_for(member)
 
       %{
         admin: admin,
         admin_token: admin_token,
         member: member,
         member_token: member_token,
-        tenant: admin.tenant
+        tenant: tenant
       }
     end
 
-    test "admin can remove a user", %{
-      conn: conn,
-      admin_token: token,
-      member: member
-    } do
+    test "admin can remove a user", %{conn: conn, admin_token: token, member: member} do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
@@ -407,11 +302,7 @@ defmodule RicqchetWeb.TenantUserControllerTest do
       assert updated_member.status == "suspended"
     end
 
-    test "admin cannot remove self", %{
-      conn: conn,
-      admin_token: token,
-      admin: admin
-    } do
+    test "admin cannot remove self", %{conn: conn, admin_token: token, admin: admin} do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
@@ -422,11 +313,7 @@ defmodule RicqchetWeb.TenantUserControllerTest do
       assert response["message"] =~ "cannot remove yourself"
     end
 
-    test "member cannot remove users", %{
-      conn: conn,
-      member_token: token,
-      admin: admin
-    } do
+    test "member cannot remove users", %{conn: conn, member_token: token, admin: admin} do
       conn =
         conn
         |> put_req_header("content-type", "application/json")
@@ -436,10 +323,7 @@ defmodule RicqchetWeb.TenantUserControllerTest do
       assert json_response(conn, 403)
     end
 
-    test "returns 404 for non-existent user", %{
-      conn: conn,
-      admin_token: token
-    } do
+    test "returns 404 for non-existent user", %{conn: conn, admin_token: token} do
       fake_id = Ecto.UUID.generate()
 
       conn =
@@ -461,191 +345,17 @@ defmodule RicqchetWeb.TenantUserControllerTest do
     end
   end
 
-  describe "POST /v1/auth/accept-invite" do
-    setup do
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "admin@accept-test.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Accept Test Org"
-        })
-
-      {:ok, unloaded_admin} = Auth.verify_email(token)
-      admin = Repo.preload(unloaded_admin, :tenant)
-
-      # Create an invitation
-      {:ok, invitation} =
-        Tenants.invite_user(admin.tenant, admin, %{
-          "email" => "invitee@example.com",
-          "role" => "member"
-        })
-
-      %{
-        admin: admin,
-        tenant: admin.tenant,
-        invitation: invitation
-      }
-    end
-
-    test "accepts invitation and creates user", %{
-      conn: conn,
-      tenant: tenant,
-      invitation: invitation
-    } do
-      conn =
-        conn
-        |> put_req_header("content-type", "application/json")
-        |> post("/v1/auth/accept-invite", %{
-          "token" => invitation.token,
-          "password" => "new_secure_password_123"
-        })
-
-      response = json_response(conn, 200)
-
-      assert response["user"]["email"] == "invitee@example.com"
-      assert response["user"]["role"] == "member"
-      assert response["user"]["status"] == "active"
-      assert response["user"]["tenant_id"] == tenant.id
-      assert response["access_token"]
-      assert response["refresh_token"]
-      assert response["expires_in"]
-    end
-
-    test "returns error for invalid token", %{conn: conn} do
-      conn =
-        conn
-        |> put_req_header("content-type", "application/json")
-        |> post("/v1/auth/accept-invite", %{
-          "token" => "invalid_token",
-          "password" => "new_secure_password_123"
-        })
-
-      response = json_response(conn, 400)
-      assert response["error"] == "invalid_token"
-    end
-
-    test "returns error for already used invitation", %{
-      conn: conn,
-      invitation: invitation
-    } do
-      # Accept invitation first time
-      conn
-      |> put_req_header("content-type", "application/json")
-      |> post("/v1/auth/accept-invite", %{
-        "token" => invitation.token,
-        "password" => "new_secure_password_123"
-      })
-
-      # Try to accept again
-      conn =
-        build_conn()
-        |> put_req_header("content-type", "application/json")
-        |> post("/v1/auth/accept-invite", %{
-          "token" => invitation.token,
-          "password" => "another_password_123"
-        })
-
-      response = json_response(conn, 400)
-      assert response["error"] == "invitation_not_pending"
-    end
-
-    test "returns error for weak password", %{
-      conn: conn,
-      invitation: invitation
-    } do
-      conn =
-        conn
-        |> put_req_header("content-type", "application/json")
-        |> post("/v1/auth/accept-invite", %{
-          "token" => invitation.token,
-          "password" => "short"
-        })
-
-      assert json_response(conn, 422)
-    end
-
-    test "returns error for expired invitation", %{
-      conn: conn,
-      admin: admin,
-      tenant: tenant
-    } do
-      # Create an invitation that expires immediately
-      {:ok, invitation} =
-        Tenants.invite_user(tenant, admin, %{
-          email: "expired@example.com",
-          role: "member",
-          ttl: 0
-        })
-
-      # Small delay to ensure expiration
-      Process.sleep(10)
-
-      conn =
-        conn
-        |> put_req_header("content-type", "application/json")
-        |> post("/v1/auth/accept-invite", %{
-          "token" => invitation.token,
-          "password" => "new_secure_password_123"
-        })
-
-      response = json_response(conn, 400)
-      assert response["error"] == "token_expired"
-    end
-
-    test "returns error when user already exists in tenant", %{
-      conn: conn,
-      admin: admin,
-      tenant: tenant
-    } do
-      # Create an invitation for the admin's email (who already exists)
-      {:ok, invitation} =
-        Tenants.invite_user(tenant, admin, %{
-          "email" => admin.email,
-          "role" => "member"
-        })
-
-      conn =
-        conn
-        |> put_req_header("content-type", "application/json")
-        |> post("/v1/auth/accept-invite", %{
-          "token" => invitation.token,
-          "password" => "new_secure_password_123"
-        })
-
-      response = json_response(conn, 409)
-      assert response["error"] == "user_already_exists"
-    end
-  end
-
   describe "DELETE /v1/tenant/users/:id - admin removal" do
     setup do
-      {:ok, %{user: _user, verification_token: token}} =
-        Auth.register_user(%{
-          "email" => "admin1@admin-delete.com",
-          "password" => "secure_password_123",
-          "tenant_name" => "Admin Delete Org"
-        })
+      {:ok, %{user: admin, tenant: tenant}} =
+        create_tenant_and_user(email: "admin1@admin-delete.com")
 
-      {:ok, unloaded_admin} = Auth.verify_email(token)
-      admin = Repo.preload(unloaded_admin, :tenant)
-      {:ok, admin_token, _claims} = Token.generate_access_token(admin)
+      admin_token = access_token_for(admin)
 
-      # Create another admin
-      {:ok, unconfirmed_admin2} =
-        Users.create_user(admin.tenant, %{
-          "email" => "admin2@admin-delete.com",
-          "password" => "secure_password_123",
-          "role" => "admin"
-        })
+      {:ok, %{user: admin2}} =
+        create_tenant_and_user(tenant: tenant, email: "admin2@admin-delete.com", role: "admin")
 
-      {:ok, admin2} = Users.confirm_user(unconfirmed_admin2)
-
-      %{
-        admin: admin,
-        admin2: admin2,
-        admin_token: admin_token,
-        tenant: admin.tenant
-      }
+      %{admin: admin, admin2: admin2, admin_token: admin_token, tenant: tenant}
     end
 
     test "can remove an admin when multiple admins exist", %{
@@ -689,21 +399,11 @@ defmodule RicqchetWeb.TenantUserControllerTest do
       assert result["message"] =~ "cannot remove yourself"
     end
 
-    test "member cannot remove users", %{
-      conn: conn,
-      admin: admin,
-      tenant: tenant
-    } do
-      # Create a member
-      {:ok, unconfirmed_member} =
-        Users.create_user(tenant, %{
-          "email" => "member@admin-delete.com",
-          "password" => "secure_password_123",
-          "role" => "member"
-        })
+    test "member cannot remove users", %{conn: conn, admin: admin, tenant: tenant} do
+      {:ok, %{user: member}} =
+        create_tenant_and_user(tenant: tenant, email: "member@admin-delete.com", role: "member")
 
-      {:ok, member} = Users.confirm_user(unconfirmed_member)
-      {:ok, member_token, _claims} = Token.generate_access_token(member)
+      member_token = access_token_for(member)
 
       # Member tries to remove admin - should fail with forbidden
       result =

@@ -7,8 +7,8 @@ defmodule RicqchetWeb.ApplicationController do
 
   ## Authorization
 
-  - **List/Show**: Any authenticated tenant member (admin, member, or viewer)
-  - **Create/Update/Delete**: Tenant admin only
+  - **List/Show**: Any authenticated user (admin, member, or viewer)
+  - **Create/Update/Delete**: Member or admin
   """
 
   use RicqchetWeb, :controller
@@ -17,8 +17,8 @@ defmodule RicqchetWeb.ApplicationController do
   alias OpenApiSpex.Schema
   alias Ricqchet.ApiKeys
   alias Ricqchet.Applications
+  alias Ricqchet.Authorization
   alias Ricqchet.Repo
-  alias Ricqchet.Users.User
   alias RicqchetWeb.Schemas
 
   action_fallback RicqchetWeb.FallbackController
@@ -167,7 +167,7 @@ defmodule RicqchetWeb.ApplicationController do
     description: """
     Creates a new application within the current tenant.
 
-    **Requires admin role.**
+    **Requires member or admin role.**
 
     A default API key is automatically created and returned in the response.
     **Important:** Store the API key securely - it will not be shown again.
@@ -187,13 +187,13 @@ defmodule RicqchetWeb.ApplicationController do
   @doc """
   Creates a new application with an initial API key.
 
-  Requires admin role.
+  Requires member or admin role.
   """
   def create(conn, params) do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :editor),
          {:ok, {application, api_key}} <- create_application_with_key(tenant, params) do
       conn
       |> put_status(:created)
@@ -206,7 +206,7 @@ defmodule RicqchetWeb.ApplicationController do
     description: """
     Updates an existing application's name, description, status, or DLQ destination.
 
-    **Requires admin role.**
+    **Requires member or admin role.**
     """,
     parameters: [
       id: [
@@ -227,14 +227,14 @@ defmodule RicqchetWeb.ApplicationController do
   @doc """
   Updates an existing application.
 
-  Requires admin role.
+  Requires member or admin role.
   """
   def update(conn, %{"id" => id} = params) do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
     update_params = Map.drop(params, ["id"])
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :editor),
          {:ok, application} <- get_application_or_error(tenant, id),
          {:ok, updated} <- Applications.update_application(application, update_params) do
       render(conn, :updated, application: Repo.preload(updated, :api_keys))
@@ -246,7 +246,7 @@ defmodule RicqchetWeb.ApplicationController do
     description: """
     Deletes an application and revokes all associated API keys.
 
-    **Requires admin role.**
+    **Requires member or admin role.**
 
     **Warning:** This action is irreversible. All API keys will be immediately revoked
     and any requests using those keys will fail.
@@ -273,13 +273,13 @@ defmodule RicqchetWeb.ApplicationController do
   @doc """
   Deletes an application and revokes all its API keys.
 
-  Requires admin role.
+  Requires member or admin role.
   """
   def delete(conn, %{"id" => id}) do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    with :ok <- authorize_admin(user),
+    with :ok <- Authorization.authorize(user, :editor),
          {:ok, application} <- get_application_or_error(tenant, id),
          application <- Repo.preload(application, :api_keys),
          api_key_count <- length(application.api_keys),
@@ -287,11 +287,6 @@ defmodule RicqchetWeb.ApplicationController do
       render(conn, :deleted, id: id, api_keys_revoked: api_key_count)
     end
   end
-
-  # Authorization helpers
-
-  defp authorize_admin(%User{role: "admin"}), do: :ok
-  defp authorize_admin(_user), do: {:error, :forbidden}
 
   # Application helpers
 

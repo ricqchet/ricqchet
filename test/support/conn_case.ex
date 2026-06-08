@@ -28,6 +28,10 @@ defmodule RicqchetWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import RicqchetWeb.ConnCase
+
+      # Shared data helpers for creating tenants/users and auth tokens
+      import Ricqchet.DataCase,
+        only: [create_tenant_and_user: 1, create_tenant_and_user: 0, access_token_for: 1]
     end
   end
 

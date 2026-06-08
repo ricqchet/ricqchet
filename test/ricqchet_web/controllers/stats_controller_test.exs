@@ -1,25 +1,17 @@
 defmodule RicqchetWeb.StatsControllerTest do
   use RicqchetWeb.ConnCase, async: false
 
-  alias Ricqchet.Auth
-  alias Ricqchet.Auth.Token
   alias Ricqchet.Messages
-  alias Ricqchet.Repo
 
   setup %{conn: conn} do
-    # Create and verify an admin user
-    {:ok, %{user: _user, verification_token: token}} =
-      Auth.register_user(%{
-        "email" => "admin#{System.unique_integer()}@example.com",
-        "password" => "secure_password_123",
-        "tenant_name" => "Test Org #{System.unique_integer()}"
-      })
+    # Create an active, confirmed admin user
+    {:ok, %{user: user, tenant: tenant}} =
+      create_tenant_and_user(
+        email: "admin#{System.unique_integer()}@example.com",
+        password: "secure_password_123"
+      )
 
-    {:ok, verified_user} = Auth.verify_email(token)
-    {:ok, access_token, _claims} = Token.generate_access_token(verified_user)
-
-    user = Repo.preload(verified_user, :tenant)
-    tenant = user.tenant
+    access_token = access_token_for(user)
 
     conn =
       conn

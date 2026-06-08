@@ -16,25 +16,27 @@ defmodule RicqchetWeb.TeamLive do
      |> assign(:page_title, "Team")
      |> assign(:current_path, "/team")
      |> assign(:users, users)
-     |> assign(:show_invite_modal, false)
+     |> assign(:show_add_modal, false)
      |> assign(:show_remove_modal, false)
      |> assign(:remove_user, nil)
-     |> assign(:invite_error, nil)}
+     |> assign(:add_error, nil)
+     |> assign(:created_user_email, nil)
+     |> assign(:created_user_password, nil)}
   end
 
   @impl Phoenix.LiveView
-  def handle_event("show_invite_modal", _params, socket) do
-    {:noreply, assign(socket, show_invite_modal: true, invite_error: nil)}
+  def handle_event("show_add_modal", _params, socket) do
+    {:noreply, reset_add_modal(socket, true)}
   end
 
-  def handle_event("close_invite_modal", _params, socket) do
-    {:noreply, assign(socket, show_invite_modal: false, invite_error: nil)}
+  def handle_event("close_add_modal", _params, socket) do
+    {:noreply, reset_add_modal(socket, false)}
   end
 
-  def handle_event("invite_user", %{"email" => email, "role" => role}, socket)
+  def handle_event("add_user", %{"email" => email, "role" => role} = params, socket)
       when role in @roles do
     with :ok <- require_admin(socket) do
-      do_invite_user(socket, email, role)
+      do_add_user(socket, email, role, params["password"])
     end
   end
 
@@ -67,22 +69,29 @@ defmodule RicqchetWeb.TeamLive do
 
   # Action helpers
 
-  defp do_invite_user(socket, email, role) do
+  defp do_add_user(socket, email, role, password) do
     tenant = socket.assigns.current_tenant
+    attrs = %{"email" => email, "role" => role, "password" => password}
 
-    case Tenants.invite_user(tenant, socket.assigns.current_user, %{
-           "email" => email,
-           "role" => role
-         }) do
-      {:ok, _invitation} ->
+    case Users.create_user_by_admin(tenant, attrs) do
+      {:ok, _user, generated_password} ->
         {:noreply,
          socket
          |> reload_users()
-         |> assign(:show_invite_modal, false)
-         |> put_flash(:info, "Invitation sent to #{email}.")}
+         |> assign(:add_error, nil)
+         |> assign(:created_user_email, email)
+         |> assign(:created_user_password, generated_password)}
+
+      {:error, :user_already_exists} ->
+        {:noreply, assign(socket, :add_error, "A user with that email already exists.")}
 
       {:error, _changeset} ->
-        {:noreply, assign(socket, :invite_error, "Failed to send invitation.")}
+        {:noreply,
+         assign(
+           socket,
+           :add_error,
+           "Failed to add user. Check the email and password (minimum 12 characters)."
+         )}
     end
   end
 
@@ -129,6 +138,15 @@ defmodule RicqchetWeb.TeamLive do
     else
       :ok
     end
+  end
+
+  defp reset_add_modal(socket, show?) do
+    assign(socket,
+      show_add_modal: show?,
+      add_error: nil,
+      created_user_email: nil,
+      created_user_password: nil
+    )
   end
 
   defp reload_users(socket) do

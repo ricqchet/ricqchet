@@ -83,6 +83,9 @@ defmodule RicqchetWeb do
 
       import RicqchetWeb.CoreComponents
 
+      # Role-based `can?/2` for showing/hiding controls in templates
+      import Ricqchet.Authorization, only: [can?: 2]
+
       alias Phoenix.LiveView.JS
 
       use Gettext, backend: RicqchetWeb.Gettext

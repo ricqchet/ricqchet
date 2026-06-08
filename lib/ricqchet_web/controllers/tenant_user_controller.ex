@@ -6,14 +6,15 @@ defmodule RicqchetWeb.TenantUserController do
 
   ## Authorization
 
-  - **List**: Any authenticated tenant member
-  - **Invite/Update/Delete**: Tenant admin only
+  - **List**: Any authenticated user
+  - **Create/Update/Delete**: Admin only
   """
 
   use RicqchetWeb, :controller
   use OpenApiSpex.ControllerSpecs
 
   alias OpenApiSpex.Schema
+  alias Ricqchet.Authorization
   alias Ricqchet.Tenants
   alias Ricqchet.Users
   alias Ricqchet.Users.User
@@ -126,24 +127,23 @@ defmodule RicqchetWeb.TenantUserController do
     end
   end
 
-  operation(:invite,
-    summary: "Invite user to tenant",
+  operation(:create,
+    summary: "Create a user",
     description: """
-    Creates an invitation for a user to join the current tenant.
+    Creates a new user account on this instance.
 
-    Returns the invitation details including the token. The token should be
-    sent to the invitee securely (e.g., via email) so they can accept the
-    invitation using the `/v1/auth/accept-invite` endpoint.
+    If `password` is omitted, the server generates a secure password and returns
+    it once in the response as `password` — store it immediately, as it cannot be
+    retrieved later. Share the credentials with the user out of band.
 
-    A new user account will be created when the invitation is accepted.
+    The account is created active and confirmed; there is no email-verification step.
 
     **Requires admin role.**
     """,
     request_body:
-      {"Invitation parameters", "application/json", Schemas.Tenant.InviteUserRequest,
-       required: true},
+      {"User parameters", "application/json", Schemas.Tenant.CreateUserRequest, required: true},
     responses:
-      Schemas.Helpers.create_responses(Schemas.Tenant.InviteUserResponse, 201, [
+      Schemas.Helpers.create_responses(Schemas.Tenant.CreateUserResponse, 201, [
         401,
         403,
         409,
@@ -154,19 +154,19 @@ defmodule RicqchetWeb.TenantUserController do
   )
 
   @doc """
-  Invites a user to join the current tenant.
-
-  Requires admin role.
+  Creates a new user. Requires admin role.
   """
-  def invite(conn, params) do
+  def create(conn, params) do
     user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
+    user_params = Map.take(params, ["email", "role", "password"])
 
-    with :ok <- authorize_admin(user),
-         {:ok, invitation} <- Tenants.invite_user(tenant, user, params) do
+    with :ok <- Authorization.authorize(user, :admin),
+         {:ok, created_user, generated_password} <-
+           Users.create_user_by_admin(tenant, user_params) do
       conn
       |> put_status(:created)
-      |> render(:invite, invitation: invitation)
+      |> render(:created, user: created_user, password: generated_password)
     end
   end
 
@@ -205,7 +205,7 @@ defmodule RicqchetWeb.TenantUserController do
     tenant = conn.assigns.current_tenant
     update_params = Map.take(params, ["role"])
 
-    with :ok <- authorize_admin(current_user),
+    with :ok <- Authorization.authorize(current_user, :admin),
          {:ok, target_user} <- get_tenant_user(tenant, user_id),
          :ok <- validate_role_change(current_user, target_user, update_params, tenant),
          {:ok, updated_user} <- Users.update_user(target_user, update_params) do
@@ -244,7 +244,7 @@ defmodule RicqchetWeb.TenantUserController do
     current_user = conn.assigns.current_user
     tenant = conn.assigns.current_tenant
 
-    with :ok <- authorize_admin(current_user),
+    with :ok <- Authorization.authorize(current_user, :admin),
          {:ok, target_user} <- get_tenant_user(tenant, user_id),
          :ok <- validate_not_self(current_user, target_user),
          :ok <- validate_not_last_admin(target_user, tenant),
@@ -254,9 +254,6 @@ defmodule RicqchetWeb.TenantUserController do
   end
 
   # Authorization helpers
-
-  defp authorize_admin(%User{role: "admin"}), do: :ok
-  defp authorize_admin(_user), do: {:error, :forbidden}
 
   defp get_tenant_user(tenant, user_id) do
     case Users.get_user_by_tenant(tenant, user_id) do
