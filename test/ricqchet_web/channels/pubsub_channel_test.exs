@@ -4,6 +4,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
   import Ricqchet.DataCase, only: [create_tenant_with_api_key: 0]
 
   alias Ricqchet.Channels.ChannelEvent
+  alias Ricqchet.Channels.ConnectionTracker
   alias Ricqchet.Channels.NamespaceCache
   alias Ricqchet.Channels.Namespaces
   alias Ricqchet.Channels.SubscriberTracker
@@ -39,47 +40,76 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
     socket
   end
 
+  # Internal, application-scoped PubSub topic that server-published events and
+  # presence are namespaced on. Clients join with the bare channel name; the
+  # server routes through this topic for tenant isolation.
+  defp internal_topic(app_id, channel_name), do: "channels:app:#{app_id}:#{channel_name}"
+
   describe "join/3 - public channels" do
-    test "joins a public channel", %{socket: socket, application: app} do
-      topic = "channels:app:#{app.id}:chat-room"
-      assert {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+    test "joins a public channel", %{socket: socket} do
+      assert {:ok, _reply, _socket} = subscribe_and_join(socket, "chat-room", %{})
     end
 
     test "tracks subscriber count on join", %{socket: socket, application: app} do
-      topic = "channels:app:#{app.id}:tracked-room"
-      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "tracked-room", %{})
       assert SubscriberTracker.get_count(app.id, "tracked-room") == 1
     end
 
-    test "rejects join when app_id doesn't match", %{socket: socket} do
+    test "isolates same-named channels across applications", %{socket: socket, application: app} do
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "chat-room", %{})
+
       other_app_id = Ecto.UUID.generate()
-      topic = "channels:app:#{other_app_id}:chat-room"
-      assert {:error, %{reason: "unauthorized"}} = subscribe_and_join(socket, topic, %{})
+
+      foreign_payload = %{
+        id: Ecto.UUID.generate(),
+        event: "new-message",
+        data: %{"text" => "from other app"},
+        channel: "chat-room",
+        socket_id: nil
+      }
+
+      # An event for a different application's identically-named channel must not
+      # reach this subscriber — isolation now comes from the API key, not the topic.
+      Phoenix.PubSub.broadcast(
+        Ricqchet.PubSub,
+        internal_topic(other_app_id, "chat-room"),
+        {:channel_event, foreign_payload}
+      )
+
+      refute_push "new-message", _, 200
+
+      Phoenix.PubSub.broadcast(
+        Ricqchet.PubSub,
+        internal_topic(app.id, "chat-room"),
+        {:channel_event, %{foreign_payload | data: %{"text" => "from own app"}}}
+      )
+
+      assert_push "new-message", %{data: %{"text" => "from own app"}}
     end
 
-    test "rejects invalid channel name", %{socket: socket, application: app} do
-      topic = "channels:app:#{app.id}:invalid name!"
+    test "accepts hierarchical (dotted) channel names", %{socket: socket} do
+      assert {:ok, _reply, _socket} = subscribe_and_join(socket, "orders.us.west", %{})
+    end
 
+    test "rejects invalid channel name", %{socket: socket} do
       assert {:error, %{reason: "invalid channel name" <> _}} =
-               subscribe_and_join(socket, topic, %{})
+               subscribe_and_join(socket, "invalid name!", %{})
     end
 
-    test "rejects channel name that is too long", %{socket: socket, application: app} do
+    test "rejects channel name that is too long", %{socket: socket} do
       long_name = String.duplicate("a", 165)
-      topic = "channels:app:#{app.id}:#{long_name}"
 
       assert {:error, %{reason: "invalid channel name" <> _}} =
-               subscribe_and_join(socket, topic, %{})
+               subscribe_and_join(socket, long_name, %{})
     end
 
-    test "accepts maximum length channel name", %{socket: socket, application: app} do
+    test "accepts maximum length channel name", %{socket: socket} do
       name = String.duplicate("a", 164)
-      topic = "channels:app:#{app.id}:#{name}"
-      assert {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      assert {:ok, _reply, _socket} = subscribe_and_join(socket, name, %{})
     end
 
-    test "rejects invalid topic format", %{socket: socket} do
-      assert {:error, %{reason: "invalid_topic"}} =
+    test "rejects channel name containing reserved characters", %{socket: socket} do
+      assert {:error, %{reason: "invalid channel name" <> _}} =
                subscribe_and_join(socket, "channels:bad", %{})
     end
   end
@@ -103,8 +133,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         |> Plug.Conn.resp(200, Jason.encode!(%{ok: true}))
       end)
 
-      topic = "channels:app:#{app.id}:private-room"
-      assert {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      assert {:ok, _reply, _socket} = subscribe_and_join(socket, "private-room", %{})
     end
 
     test "rejects private channel when auth returns 403", %{
@@ -123,18 +152,12 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         Plug.Conn.resp(conn, 403, "Forbidden")
       end)
 
-      topic = "channels:app:#{app.id}:private-room"
-      assert {:error, %{reason: "forbidden"}} = subscribe_and_join(socket, topic, %{})
+      assert {:error, %{reason: "forbidden"}} = subscribe_and_join(socket, "private-room", %{})
     end
 
-    test "rejects private channel when no auth endpoint configured", %{
-      socket: socket,
-      application: app
-    } do
-      topic = "channels:app:#{app.id}:private-room"
-
+    test "rejects private channel when no auth endpoint configured", %{socket: socket} do
       assert {:error, %{reason: "auth_endpoint_not_configured"}} =
-               subscribe_and_join(socket, topic, %{})
+               subscribe_and_join(socket, "private-room", %{})
     end
 
     test "rejects private channel when auth endpoint is down", %{
@@ -150,8 +173,8 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       socket = reconnect_socket(api_key)
       Bypass.down(bypass)
 
-      topic = "channels:app:#{app.id}:private-room"
-      assert {:error, %{reason: "auth_unavailable"}} = subscribe_and_join(socket, topic, %{})
+      assert {:error, %{reason: "auth_unavailable"}} =
+               subscribe_and_join(socket, "private-room", %{})
     end
 
     test "uses namespace auth endpoint over app-level", %{
@@ -179,8 +202,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         |> Plug.Conn.resp(200, Jason.encode!(%{ok: true}))
       end)
 
-      topic = "channels:app:#{app.id}:private-vip-room"
-      assert {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      assert {:ok, _reply, _socket} = subscribe_and_join(socket, "private-vip-room", %{})
     end
   end
 
@@ -203,8 +225,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         |> Plug.Conn.resp(200, Jason.encode!(%{ok: true}))
       end)
 
-      topic = "channels:app:#{app.id}:presence-lobby"
-      assert {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      assert {:ok, _reply, _socket} = subscribe_and_join(socket, "presence-lobby", %{})
     end
 
     test "rejects presence channel when auth fails", %{
@@ -223,15 +244,13 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         Plug.Conn.resp(conn, 403, "Forbidden")
       end)
 
-      topic = "channels:app:#{app.id}:presence-lobby"
-      assert {:error, %{reason: "forbidden"}} = subscribe_and_join(socket, topic, %{})
+      assert {:error, %{reason: "forbidden"}} = subscribe_and_join(socket, "presence-lobby", %{})
     end
   end
 
   describe "receiving events" do
     test "receives events broadcast to channel", %{socket: socket, application: app} do
-      topic = "channels:app:#{app.id}:event-room"
-      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "event-room", %{})
 
       payload = %{
         id: Ecto.UUID.generate(),
@@ -241,7 +260,11 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         socket_id: nil
       }
 
-      Phoenix.PubSub.broadcast(Ricqchet.PubSub, topic, {:channel_event, payload})
+      Phoenix.PubSub.broadcast(
+        Ricqchet.PubSub,
+        internal_topic(app.id, "event-room"),
+        {:channel_event, payload}
+      )
 
       assert_push "new-message", %{data: %{"text" => "hello"}, channel: "event-room"}
     end
@@ -250,8 +273,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       socket: socket,
       application: app
     } do
-      topic = "channels:app:#{app.id}:skip-room"
-      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "skip-room", %{})
 
       # The socket_id should match what ChannelSocket.id/1 returns
       sender_socket_id = "channel_socket:#{app.id}:user_123"
@@ -264,7 +286,11 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         socket_id: sender_socket_id
       }
 
-      Phoenix.PubSub.broadcast(Ricqchet.PubSub, topic, {:channel_event, payload})
+      Phoenix.PubSub.broadcast(
+        Ricqchet.PubSub,
+        internal_topic(app.id, "skip-room"),
+        {:channel_event, payload}
+      )
 
       refute_push "my-event", _, 200
     end
@@ -291,24 +317,20 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       insert_event(app.id, tenant.id, "recovery-room", "msg-2", %{text: "second"})
       insert_event(app.id, tenant.id, "recovery-room", "msg-3", %{text: "third"})
 
-      topic = "channels:app:#{app.id}:recovery-room"
-
       {:ok, _reply, _socket} =
-        subscribe_and_join(socket, topic, %{"last_event_id" => e1.id})
+        subscribe_and_join(socket, "recovery-room", %{"last_event_id" => e1.id})
 
       assert_push "msg-2", %{data: %{"text" => "second"}, channel: "recovery-room"}
       assert_push "msg-3", %{data: %{"text" => "third"}, channel: "recovery-room"}
     end
 
     test "pushes recovery_failed when last_event_id not found", %{
-      socket: socket,
-      application: app
+      socket: socket
     } do
-      topic = "channels:app:#{app.id}:recovery-room"
       fake_id = Ecto.UUID.generate()
 
       {:ok, _reply, _socket} =
-        subscribe_and_join(socket, topic, %{"last_event_id" => fake_id})
+        subscribe_and_join(socket, "recovery-room", %{"last_event_id" => fake_id})
 
       assert_push "ricqchet:recovery_failed", %{
         reason: "event_not_found",
@@ -323,8 +345,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
     } do
       insert_event(app.id, tenant.id, "no-recover", "msg-1")
 
-      topic = "channels:app:#{app.id}:no-recover"
-      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "no-recover", %{})
 
       refute_push "msg-1", _, 200
     end
@@ -337,10 +358,8 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       e1 = insert_event(app.id, tenant.id, "seq-room", "msg-1")
       insert_event(app.id, tenant.id, "seq-room", "msg-2")
 
-      topic = "channels:app:#{app.id}:seq-room"
-
       {:ok, _reply, _socket} =
-        subscribe_and_join(socket, topic, %{"last_event_id" => e1.id})
+        subscribe_and_join(socket, "seq-room", %{"last_event_id" => e1.id})
 
       assert_push "msg-2", %{sequence: seq}
       assert is_integer(seq)
@@ -361,8 +380,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
 
       insert_event(app.id, tenant.id, "cache-room", "latest-msg", %{text: "cached"})
 
-      topic = "channels:app:#{app.id}:cache-room"
-      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "cache-room", %{})
 
       assert_push "ricqchet:cached_event", payload
       assert payload.data == %{"text" => "cached"}
@@ -385,8 +403,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
 
       insert_event(app.id, tenant.id, "nocache-room", "msg", %{text: "hi"})
 
-      topic = "channels:app:#{app.id}:nocache-room"
-      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "nocache-room", %{})
 
       refute_push "ricqchet:cached_event", _, 200
     end
@@ -402,8 +419,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         tenant.id
       )
 
-      topic = "channels:app:#{app.id}:empty-room"
-      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "empty-room", %{})
 
       refute_push "ricqchet:cached_event", _, 200
     end
@@ -422,10 +438,8 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       e1 = insert_event(app.id, tenant.id, "recover-cache-room", "msg-1", %{text: "first"})
       insert_event(app.id, tenant.id, "recover-cache-room", "msg-2", %{text: "second"})
 
-      topic = "channels:app:#{app.id}:recover-cache-room"
-
       {:ok, _reply, _socket} =
-        subscribe_and_join(socket, topic, %{"last_event_id" => e1.id})
+        subscribe_and_join(socket, "recover-cache-room", %{"last_event_id" => e1.id})
 
       # Should get recovery, not cached event
       assert_push "msg-2", %{data: %{"text" => "second"}}
@@ -446,8 +460,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       insert_event(app.id, tenant.id, "multi-room", "old-msg", %{text: "old"})
       insert_event(app.id, tenant.id, "multi-room", "new-msg", %{text: "new"})
 
-      topic = "channels:app:#{app.id}:multi-room"
-      {:ok, _reply, _socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "multi-room", %{})
 
       assert_push "ricqchet:cached_event", payload
       assert payload.event == "new-msg"
@@ -473,49 +486,72 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       %{socket: socket, bypass: bypass}
     end
 
-    test "sends client event on private channel", %{socket: socket, application: app} do
-      topic = "channels:app:#{app.id}:private-client-room"
-      {:ok, _reply, socket} = subscribe_and_join(socket, topic, %{})
+    test "sends client event on private channel", %{socket: socket} do
+      {:ok, _reply, socket} = subscribe_and_join(socket, "private-client-room", %{})
 
       ref = push(socket, "client-typing", %{"user" => "alice"})
       assert_reply ref, :ok
     end
 
-    test "rejects client event on public channel", %{application: app, api_key: api_key} do
+    test "rejects client event on public channel", %{api_key: api_key} do
       {:ok, _reply, pub_socket} =
         api_key
         |> reconnect_socket()
-        |> subscribe_and_join("channels:app:#{app.id}:public-room", %{})
+        |> subscribe_and_join("public-room", %{})
 
       ref = push(pub_socket, "client-typing", %{"user" => "alice"})
       assert_reply ref, :error, %{reason: "client_events_not_allowed"}
     end
 
-    test "rejects non-client-prefixed events", %{application: app, api_key: api_key} do
+    test "rejects non-client-prefixed events", %{api_key: api_key} do
       {:ok, _reply, joined_socket} =
         api_key
         |> reconnect_socket()
-        |> subscribe_and_join("channels:app:#{app.id}:public-room", %{})
+        |> subscribe_and_join("public-room", %{})
 
       ref = push(joined_socket, "custom-event", %{})
       assert_reply ref, :error, %{reason: "invalid_event"}
     end
 
-    test "broadcasts client event to other subscribers", %{
+    test "delivers client event to other subscribers and excludes the sender", %{
       socket: socket,
-      application: app
+      api_key: api_key
     } do
-      topic = "channels:app:#{app.id}:private-broadcast-room"
-      {:ok, _reply, sender_socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, sender_socket} = subscribe_and_join(socket, "private-broadcast-room", %{})
+
+      {:ok, receiver_raw} =
+        connect(ChannelSocket, %{"api_key" => api_key.api_key, "user_id" => "user_456"})
+
+      {:ok, _reply, _receiver_socket} =
+        subscribe_and_join(receiver_raw, "private-broadcast-room", %{})
 
       push(sender_socket, "client-typing", %{"active" => true})
 
-      # broadcast_from excludes sender, so assert_broadcast instead
-      assert_broadcast "client-typing", %{
+      # The other subscriber receives the event tagged with the sender's identity...
+      assert_push "client-typing", %{
         data: %{"active" => true},
         channel: "private-broadcast-room",
         user_id: "user_123"
       }
+
+      # ...and the sender's own channel is excluded, so no duplicate is pushed.
+      refute_push "client-typing", _, 200
+    end
+
+    test "isolates client events across applications", %{socket: socket} do
+      {:ok, _reply, _joined} = subscribe_and_join(socket, "private-broadcast-room", %{})
+
+      other_app_id = Ecto.UUID.generate()
+
+      # A client event for another application's identically-named channel must not arrive.
+      Phoenix.PubSub.broadcast(
+        Ricqchet.PubSub,
+        internal_topic(other_app_id, "private-broadcast-room"),
+        {:client_event, "client-typing",
+         %{data: %{"x" => 1}, channel: "private-broadcast-room", user_id: "intruder"}}
+      )
+
+      refute_push "client-typing", _, 200
     end
 
     test "rate limits excessive client events", %{
@@ -529,8 +565,7 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
         tenant.id
       )
 
-      topic = "channels:app:#{app.id}:private-rate-room"
-      {:ok, _reply, socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, socket} = subscribe_and_join(socket, "private-rate-room", %{})
 
       # First 2 should succeed
       ref1 = push(socket, "client-ping", %{})
@@ -544,10 +579,31 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
     end
   end
 
+  describe "connection accounting" do
+    test "channel join and leave do not change the per-socket connection count", %{
+      socket: socket,
+      application: app
+    } do
+      # The socket connected in setup is counted once.
+      assert ConnectionTracker.get_count(app.id) == 1
+
+      {:ok, _reply, joined} = subscribe_and_join(socket, "room-a", %{})
+      assert ConnectionTracker.get_count(app.id) == 1
+
+      Process.unlink(joined.channel_pid)
+      ref = Process.monitor(joined.channel_pid)
+      leave(joined)
+      assert_receive {:DOWN, ^ref, :process, _, _}
+
+      # Leaving the channel must NOT decrement the connection count — the count is
+      # released per-socket (when the socket process dies), not per channel leave.
+      assert ConnectionTracker.get_count(app.id) == 1
+    end
+  end
+
   describe "terminate/2" do
     test "decrements subscriber count on leave", %{socket: socket, application: app} do
-      topic = "channels:app:#{app.id}:leave-room"
-      {:ok, _reply, socket} = subscribe_and_join(socket, topic, %{})
+      {:ok, _reply, socket} = subscribe_and_join(socket, "leave-room", %{})
       assert SubscriberTracker.get_count(app.id, "leave-room") == 1
 
       Process.unlink(socket.channel_pid)

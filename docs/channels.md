@@ -16,6 +16,33 @@ wss://api.ricqchet.com/channels?api_key=<key>&user_id=<uid>&user_info=<json>
 | `user_id` | No | Unique user identifier (default: "anonymous") |
 | `user_info` | No | JSON-encoded user metadata |
 
+## Subscribing to Channels
+
+After connecting, join a channel using its **bare name** as the topic — there is
+no application prefix to construct. The application is resolved from your API key,
+so two applications can use the same channel name without colliding.
+
+```javascript
+import { Socket } from "phoenix"
+
+const socket = new Socket("wss://api.ricqchet.com/channels", {
+  params: { api_key: "your_api_key", user_id: "user-123" }
+})
+socket.connect()
+
+// Public channel
+const chat = socket.channel("chat-room")
+chat.join()
+chat.on("new-message", (payload) => console.log(payload.data))
+
+// Private / presence channels (require auth endpoint approval)
+socket.channel("private-orders").join()
+socket.channel("presence-lobby").join()
+
+// Hierarchical names are allowed
+socket.channel("orders.us.west").join()
+```
+
 ## Channel Types
 
 Channel type is determined by the name prefix:
@@ -26,7 +53,8 @@ Channel type is determined by the name prefix:
 | Private | `private-` | Yes | No |
 | Presence | `presence-` | Yes | Yes |
 
-Channel names must be 1-164 alphanumeric characters, dashes, or underscores.
+Channel names must be 1-164 characters of letters, digits, dashes, underscores, or
+dots. Use dots for hierarchical names (e.g. `orders.us.west`).
 
 ## Publishing Events
 
