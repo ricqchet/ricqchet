@@ -3,8 +3,12 @@ defmodule Ricqchet.Channels.ClientEventRateLimiter do
   ETS-based rate limiter for client-to-client events.
 
   Uses a sliding window approach bucketed by second. Each key is
-  `{application_id, user_id, window_second}` with an atomic counter.
+  `{application_id, subject_id, window_second}` with an atomic counter.
   Stale entries are cleaned up periodically.
+
+  `subject_id` must be a **server-controlled, non-spoofable identifier** — callers
+  pass the per-connection `connection_id` (not the client-supplied `user_id`) so a
+  spoofed or rotated `user_id` cannot multiply a connection's event budget.
   """
 
   use GenServer
@@ -22,13 +26,16 @@ defmodule Ricqchet.Channels.ClientEventRateLimiter do
   @doc """
   Checks if a client event is within the rate limit.
 
+  `subject_id` is the rate-limit subject — a server-controlled identifier such as
+  the connection id (never the spoofable, client-supplied `user_id`).
+
   Returns `:ok` if allowed, or `:rate_limited` if the limit is exceeded.
   The `limit` parameter defaults to #{@default_limit} events per second.
   """
   @spec check_rate(String.t(), String.t(), non_neg_integer()) :: :ok | :rate_limited
-  def check_rate(application_id, user_id, limit \\ @default_limit) do
+  def check_rate(application_id, subject_id, limit \\ @default_limit) do
     window = System.monotonic_time(:second)
-    key = {application_id, user_id, window}
+    key = {application_id, subject_id, window}
     count = :ets.update_counter(@table, key, {2, 1}, {key, 0})
 
     if count <= limit, do: :ok, else: :rate_limited

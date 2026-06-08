@@ -3,6 +3,7 @@ defmodule RicqchetWeb.Channels.ChannelSocketTest do
 
   import Ricqchet.DataCase, only: [create_tenant_with_api_key: 0]
 
+  alias Ricqchet.ApiKeys
   alias RicqchetWeb.Channels.ChannelSocket
 
   setup do
@@ -28,6 +29,32 @@ defmodule RicqchetWeb.Channels.ChannelSocketTest do
 
       assert socket.assigns.application_id == application.id
       assert socket.assigns.user_id == "user_123"
+    end
+
+    test "connects with a browser-safe subscribe-scoped API key", %{application: application} do
+      {:ok, sub_key} =
+        ApiKeys.create_api_key(application, %{name: "Browser Key", scope: "subscribe"})
+
+      assert {:ok, socket} =
+               connect(ChannelSocket, %{
+                 "api_key" => sub_key.api_key,
+                 "user_id" => "user_123"
+               })
+
+      assert socket.assigns.application_id == application.id
+    end
+
+    test "assigns a stable socket_id and a server-generated connection_id", %{
+      api_key: api_key,
+      application: application
+    } do
+      {:ok, socket} =
+        connect(ChannelSocket, %{"api_key" => api_key.api_key, "user_id" => "user_123"})
+
+      assert socket.assigns.socket_id == "channel_socket:#{application.id}:user_123"
+      # connection_id is server-generated, opaque, and independent of user_id
+      assert is_binary(socket.assigns.connection_id)
+      refute socket.assigns.connection_id =~ "user_123"
     end
 
     test "assigns default user_id when not provided", %{api_key: api_key} do

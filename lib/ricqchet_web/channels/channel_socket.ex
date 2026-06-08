@@ -32,6 +32,26 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
   - API key is missing, invalid, revoked, or expired
   - The associated application has `channels_enabled` set to false
   - The associated application or tenant is inactive
+
+  ## API key scopes
+
+  Both `relay` and `subscribe` scoped keys may open this socket (see
+  `Ricqchet.ApiKeys.Scope`). The socket is *not* scope-gated: `subscribe` keys
+  are browser-safe precisely because the socket is the only surface they can
+  reach — they are rejected on every REST relay endpoint. The privileged
+  channel actions are gated independently of the key scope (the
+  `channels_enabled` flag, the per-channel auth endpoint for private/presence
+  channels, and the client-event rate limiter), so granting `subscribe` keys
+  the full subscriber capability set exposes no relay-only capability.
+
+  ## Identity
+
+  `user_id`/`user_info` here are *client-supplied* and therefore unverified.
+  They are treated as a provisional identity and are overridden by the
+  customer's auth endpoint for private/presence channels (see
+  `Ricqchet.Channels.Auth` and `RicqchetWeb.Channels.PubsubChannel`). A stable
+  per-connection `connection_id` is assigned at connect time and used as the
+  rate-limit key so identity spoofing cannot inflate client-event limits.
   """
 
   use Phoenix.Socket
@@ -96,6 +116,17 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
     |> assign(:tenant_id, tenant.id)
     |> assign(:user_id, user_id)
     |> assign(:user_info, user_info)
+    |> assign(:connection_id, generate_connection_id())
+    |> then(&assign(&1, :socket_id, id(&1)))
+  end
+
+  # A stable, server-generated identifier for this physical connection. Used as
+  # the client-event rate-limit key so a spoofed/rotated `user_id` cannot
+  # multiply a single connection's event budget.
+  defp generate_connection_id do
+    12
+    |> :crypto.strong_rand_bytes()
+    |> Base.url_encode64(padding: false)
   end
 
   defp authenticate(api_key) do

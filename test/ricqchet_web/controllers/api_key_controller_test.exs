@@ -143,6 +143,33 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
       assert String.length(response["prefix"]) == 8
       assert response["status"] == "active"
       assert response["created_at"]
+      assert response["scope"] == "relay"
+    end
+
+    test "creates a browser-safe subscribe-scoped key", %{conn: conn, application: application} do
+      conn =
+        post(conn, "/v1/applications/#{application.id}/api-keys", %{
+          name: "Browser Key",
+          scope: "subscribe"
+        })
+
+      assert json_response(conn, 201)["scope"] == "subscribe"
+    end
+
+    test "defaults scope to relay when omitted", %{conn: conn, application: application} do
+      conn = post(conn, "/v1/applications/#{application.id}/api-keys", %{name: "Server Key"})
+
+      assert json_response(conn, 201)["scope"] == "relay"
+    end
+
+    test "returns 422 for an invalid scope", %{conn: conn, application: application} do
+      conn =
+        post(conn, "/v1/applications/#{application.id}/api-keys", %{
+          name: "Bad Scope",
+          scope: "god"
+        })
+
+      assert json_response(conn, 422)["error"] == "validation_error"
     end
 
     test "full key is only returned on creation", %{
@@ -357,6 +384,17 @@ defmodule RicqchetWeb.ApiKeyControllerTest do
       assert response["new_api_key"]["name"] == old_key.name
       assert response["new_api_key"]["api_key"]
       assert response["new_api_key"]["status"] == "active"
+    end
+
+    test "preserves the key scope on rotation", %{conn: conn, application: application} do
+      {:ok, sub_key} =
+        ApiKeys.create_api_key(application, %{name: "Browser Key", scope: "subscribe"})
+
+      conn = post(conn, "/v1/api-keys/#{sub_key.id}/rotate")
+
+      response = json_response(conn, 200)
+      assert response["old_api_key"]["scope"] == "subscribe"
+      assert response["new_api_key"]["scope"] == "subscribe"
     end
 
     test "old key is revoked after rotation", %{conn: conn, application: application} do

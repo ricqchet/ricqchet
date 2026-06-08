@@ -40,6 +40,13 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
     socket
   end
 
+  defp connect_as(api_key, user_id) do
+    {:ok, socket} =
+      connect(ChannelSocket, %{"api_key" => api_key.api_key, "user_id" => user_id})
+
+    socket
+  end
+
   # Internal, application-scoped PubSub topic that server-published events and
   # presence are namespaced on. Clients join with the bare channel name; the
   # server routes through this topic for tenant isolation.
@@ -611,6 +618,152 @@ defmodule RicqchetWeb.Channels.PubsubChannelTest do
       leave(socket)
       assert_receive {:DOWN, ^ref, :process, _, _}
       assert SubscriberTracker.get_count(app.id, "leave-room") == 0
+    end
+  end
+
+  describe "identity binding" do
+    setup %{application: app} do
+      bypass = Bypass.open()
+
+      app
+      |> Ecto.Changeset.change(channels_auth_endpoint: "http://localhost:#{bypass.port}/auth")
+      |> Ricqchet.Repo.update!()
+
+      %{bypass: bypass}
+    end
+
+    test "presence uses the auth endpoint's user_id, not the client-supplied one", %{
+      api_key: api_key,
+      bypass: bypass
+    } do
+      Bypass.expect_once(bypass, "POST", "/auth", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{user_id: "verified-user", user_info: %{"role" => "member"}})
+        )
+      end)
+
+      socket = connect_as(api_key, "attacker-spoofed")
+      {:ok, _reply, _socket} = subscribe_and_join(socket, "presence-id-lobby", %{})
+
+      assert_push "presence_state", state
+      assert Map.has_key?(state, "verified-user")
+      refute Map.has_key?(state, "attacker-spoofed")
+    end
+
+    test "client events are attributed to the verified user_id", %{
+      api_key: api_key,
+      bypass: bypass
+    } do
+      Bypass.stub(bypass, "POST", "/auth", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{user_id: "verified-user"}))
+      end)
+
+      # A second subscriber observes the broadcast (broadcast_from excludes the sender).
+      sender_socket = connect_as(api_key, "attacker-spoofed")
+      {:ok, _r1, sender} = subscribe_and_join(sender_socket, "private-id-room", %{})
+
+      receiver_socket = connect_as(api_key, "observer")
+      {:ok, _r2, _receiver} = subscribe_and_join(receiver_socket, "private-id-room", %{})
+
+      push(sender, "client-typing", %{"active" => true})
+
+      assert_push "client-typing", %{channel: "private-id-room", user_id: "verified-user"}
+    end
+
+    test "falls back to the client user_id when the auth endpoint returns no identity", %{
+      api_key: api_key,
+      bypass: bypass
+    } do
+      Bypass.stub(bypass, "POST", "/auth", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{ok: true}))
+      end)
+
+      sender_socket = connect_as(api_key, "legacy-user")
+      {:ok, _r1, sender} = subscribe_and_join(sender_socket, "private-legacy-room", %{})
+
+      receiver_socket = connect_as(api_key, "observer")
+      {:ok, _r2, _receiver} = subscribe_and_join(receiver_socket, "private-legacy-room", %{})
+
+      push(sender, "client-typing", %{})
+
+      assert_push "client-typing", %{user_id: "legacy-user"}
+    end
+  end
+
+  describe "client-event rate-limit keying" do
+    setup %{application: app} do
+      bypass = Bypass.open()
+
+      app
+      |> Ecto.Changeset.change(channels_auth_endpoint: "http://localhost:#{bypass.port}/auth")
+      |> Ricqchet.Repo.update!()
+
+      Bypass.stub(bypass, "POST", "/auth", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{ok: true}))
+      end)
+
+      :ok
+    end
+
+    test "is not keyed on the spoofable user_id", %{
+      application: app,
+      tenant: tenant,
+      api_key: api_key
+    } do
+      Namespaces.create_namespace(
+        %{pattern: "private-perconn-*", max_client_events_per_second: 1},
+        app.id,
+        tenant.id
+      )
+
+      # Two distinct connections sharing the SAME client-supplied user_id. A
+      # per-user key would let connection 1's usage rate-limit connection 2.
+      socket1 = connect_as(api_key, "same-user")
+      {:ok, _r1, conn1} = subscribe_and_join(socket1, "private-perconn-a", %{})
+
+      socket2 = connect_as(api_key, "same-user")
+      {:ok, _r2, conn2} = subscribe_and_join(socket2, "private-perconn-b", %{})
+
+      ref1 = push(conn1, "client-x", %{})
+      assert_reply ref1, :ok
+      ref1b = push(conn1, "client-x", %{})
+      assert_reply ref1b, :error, %{reason: "rate_limited"}
+
+      ref2 = push(conn2, "client-x", %{})
+      assert_reply ref2, :ok
+    end
+
+    test "is per-connection, not per-channel", %{
+      application: app,
+      tenant: tenant,
+      api_key: api_key
+    } do
+      Namespaces.create_namespace(
+        %{pattern: "private-perchan-*", max_client_events_per_second: 1},
+        app.id,
+        tenant.id
+      )
+
+      # ONE connection joined to two channels. A per-channel key would give each
+      # channel its own budget; the per-connection key shares one across both.
+      socket = connect_as(api_key, "user-1")
+      {:ok, _ra, chan_a} = subscribe_and_join(socket, "private-perchan-a", %{})
+      {:ok, _rb, chan_b} = subscribe_and_join(socket, "private-perchan-b", %{})
+
+      ref_a = push(chan_a, "client-x", %{})
+      assert_reply ref_a, :ok
+
+      ref_b = push(chan_b, "client-x", %{})
+      assert_reply ref_b, :error, %{reason: "rate_limited"}
     end
   end
 end

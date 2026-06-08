@@ -6,6 +6,11 @@ All API endpoints (except `/health`, `/api/openapi`, and `/api/docs`) require au
 Authorization: Bearer <api_key>
 ```
 
+> **API key scope.** The relay endpoints below require a `relay`-scoped API key
+> (the default). A browser-safe `subscribe`-scoped key is rejected with
+> `403 Forbidden` on every endpoint here — it is usable only on the channels
+> WebSocket. See [Authentication → API Key Scopes](authentication.md#api-key-scopes).
+
 ## Endpoints
 
 ### Health Check

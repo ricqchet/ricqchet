@@ -22,11 +22,21 @@ defmodule RicqchetWeb.Schemas.ApiKeyCreateRequest do
         format: :"date-time",
         nullable: true,
         description: "Optional expiration timestamp for the key"
+      },
+      scope: %Schema{
+        type: :string,
+        enum: ["relay", "subscribe"],
+        default: "relay",
+        description:
+          "Permission scope. Defaults to `relay` (full server-side key). Use " <>
+            "`subscribe` to mint a browser-safe key that can only subscribe to " <>
+            "channels over the WebSocket and is rejected on every REST endpoint."
       }
     },
     example: %{
       name: "Production Key",
-      expires_at: "2027-01-15T10:00:00Z"
+      expires_at: "2027-01-15T10:00:00Z",
+      scope: "relay"
     }
   })
 end

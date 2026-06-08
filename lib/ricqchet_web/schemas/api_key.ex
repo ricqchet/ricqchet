@@ -9,7 +9,7 @@ defmodule RicqchetWeb.Schemas.ApiKey do
     title: "ApiKey",
     description: "An API key for authenticating with the Ricqchet API (secrets redacted)",
     type: :object,
-    required: [:id, :name, :prefix, :status, :created_at],
+    required: [:id, :name, :prefix, :status, :scope, :created_at],
     properties: %{
       id: %Schema{
         type: :string,
@@ -28,6 +28,13 @@ defmodule RicqchetWeb.Schemas.ApiKey do
         type: :string,
         enum: ["active", "revoked"],
         description: "Current status of the key"
+      },
+      scope: %Schema{
+        type: :string,
+        enum: ["relay", "subscribe"],
+        description:
+          "Permission scope. `relay` (default) is the full server-side key; " <>
+            "`subscribe` is a browser-safe key usable only on the channels WebSocket."
       },
       last_used_at: %Schema{
         type: :string,
@@ -52,6 +59,7 @@ defmodule RicqchetWeb.Schemas.ApiKey do
       name: "Production Key",
       prefix: "rq_live_",
       status: "active",
+      scope: "relay",
       last_used_at: "2026-01-31T15:30:00Z",
       expires_at: nil,
       created_at: "2026-01-15T10:00:00Z"

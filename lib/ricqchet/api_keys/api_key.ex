@@ -10,17 +10,22 @@ defmodule Ricqchet.ApiKeys.ApiKey do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Ricqchet.ApiKeys.Scope
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
   # Length of the API key prefix used for O(1) lookup
   @api_key_prefix_length 8
 
+  @type t :: %__MODULE__{}
+
   schema "api_keys" do
     field :name, :string
     field :api_key_hash, :binary
     field :api_key_prefix, :string
     field :status, :string, default: "active"
+    field :scope, :string, default: "relay"
     field :last_used_at, :utc_datetime_usec
     field :expires_at, :utc_datetime_usec
 
@@ -40,9 +45,10 @@ defmodule Ricqchet.ApiKeys.ApiKey do
   @doc false
   def changeset(api_key, attrs) do
     api_key
-    |> cast(attrs, [:name, :status, :expires_at])
+    |> cast(attrs, [:name, :status, :scope, :expires_at])
     |> validate_required([:name])
     |> validate_inclusion(:status, ["active", "revoked"])
+    |> validate_inclusion(:scope, Scope.scopes())
     |> foreign_key_constraint(:application_id)
   end
 

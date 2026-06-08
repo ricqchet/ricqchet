@@ -42,6 +42,7 @@ Ricqchet gives you two first-class capabilities in a single service:
 | **Cache channels** | New subscribers receive the last published event immediately |
 | **Presence tracking** | See who's connected with `user_id` and custom metadata |
 | **Client events** | Peer-to-peer messaging on private/presence channels (rate-limited, `client-` prefix) |
+| **Browser-safe keys** | `subscribe`-scoped API keys connect the WebSocket but are rejected on every REST endpoint — safe to embed in front-end code |
 | **Missed-event recovery** | Rejoin with `last_event_id` to catch up after disconnect |
 | **Namespace config** | Pattern-based settings (`chat-*`, `orders.us.*`) for max members, history, auth, webhooks |
 | **Lifecycle webhooks** | Receive events when channels open/close or members join/leave |

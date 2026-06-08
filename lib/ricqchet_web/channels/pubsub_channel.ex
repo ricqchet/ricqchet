@@ -39,7 +39,6 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   alias Ricqchet.Channels.NamespaceConfig
   alias Ricqchet.Channels.SubscriberTracker
   alias Ricqchet.Channels.WebhookNotifier
-  alias RicqchetWeb.Channels.ChannelSocket
   alias RicqchetWeb.Channels.Presence
 
   @impl Phoenix.Channel
@@ -55,7 +54,7 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
 
   @impl Phoenix.Channel
   def handle_info({:channel_event, payload}, socket) do
-    if payload[:socket_id] && payload[:socket_id] == ChannelSocket.id(socket) do
+    if payload[:socket_id] && payload[:socket_id] == socket.assigns.socket_id do
       {:noreply, socket}
     else
       event_data = %{data: payload.data, channel: payload.channel}
@@ -170,9 +169,10 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     channel_name = socket.assigns.channel_name
     app_id = socket.assigns.application_id
     user_id = socket.assigns.user_id
+    connection_id = socket.assigns.connection_id
 
     with :ok <- validate_client_channel(channel_name),
-         :ok <- check_client_rate(app_id, user_id, channel_name) do
+         :ok <- check_client_rate(app_id, connection_id, channel_name) do
       Phoenix.PubSub.broadcast_from(
         Ricqchet.PubSub,
         self(),
@@ -229,10 +229,11 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
   defp join_with_auth(app_id, channel_name, last_event_id, socket) do
     application = socket.assigns.application
     user_id = socket.assigns.user_id
-    socket_id = ChannelSocket.id(socket)
+    socket_id = socket.assigns.socket_id
 
     case Auth.authorize(application, channel_name, user_id, socket_id) do
-      {:ok, _auth_data} ->
+      {:ok, auth_data} ->
+        socket = bind_identity(socket, auth_data)
         do_join(app_id, channel_name, last_event_id, socket)
 
       {:error, :forbidden} ->
@@ -273,18 +274,43 @@ defmodule RicqchetWeb.Channels.PubsubChannel do
     {:ok, socket}
   end
 
+  # The customer auth endpoint is the authority on identity for private/presence
+  # channels. When it returns a `user_id` (and optional `user_info`), trust those
+  # over the client-supplied socket params so a holder of a (public) `subscribe`
+  # key cannot impersonate another user in presence or client-event attribution.
+  # When the endpoint returns no identity, the provisional client-supplied values
+  # are kept (documented as unverified — see docs/channels.md).
+  defp bind_identity(socket, auth_data) do
+    socket
+    |> maybe_bind(:user_id, auth_data["user_id"])
+    |> maybe_bind(:user_info, auth_data["user_info"])
+  end
+
+  defp maybe_bind(socket, :user_id, user_id) when is_binary(user_id) and user_id != "" do
+    assign(socket, :user_id, user_id)
+  end
+
+  defp maybe_bind(socket, :user_info, user_info) when is_map(user_info) do
+    assign(socket, :user_info, user_info)
+  end
+
+  defp maybe_bind(socket, _key, _value), do: socket
+
   defp validate_client_channel("private-" <> _), do: :ok
   defp validate_client_channel("presence-" <> _), do: :ok
   defp validate_client_channel(_), do: {:error, "client_events_not_allowed"}
 
-  defp check_client_rate(app_id, user_id, channel_name) do
+  # Rate limits client events per physical connection (`connection_id`), not per
+  # client-supplied `user_id`, so a spoofed/rotated user_id cannot multiply a
+  # single connection's event budget.
+  defp check_client_rate(app_id, connection_id, channel_name) do
     limit =
       case NamespaceConfig.get_namespace_for_channel(app_id, channel_name) do
         {:ok, %{max_client_events_per_second: limit}} when is_integer(limit) -> limit
         _ -> 10
       end
 
-    case ClientEventRateLimiter.check_rate(app_id, user_id, limit) do
+    case ClientEventRateLimiter.check_rate(app_id, connection_id, limit) do
       :ok -> :ok
       :rate_limited -> {:error, "rate_limited"}
     end

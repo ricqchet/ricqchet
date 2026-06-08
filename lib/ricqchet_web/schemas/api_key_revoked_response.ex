@@ -9,7 +9,7 @@ defmodule RicqchetWeb.Schemas.ApiKeyRevokedResponse do
     title: "ApiKeyRevokedResponse",
     description: "Response when an API key is revoked",
     type: :object,
-    required: [:id, :name, :prefix, :status, :revoked, :revoked_at],
+    required: [:id, :name, :prefix, :status, :scope, :revoked, :revoked_at],
     properties: %{
       id: %Schema{
         type: :string,
@@ -29,6 +29,11 @@ defmodule RicqchetWeb.Schemas.ApiKeyRevokedResponse do
         enum: ["revoked"],
         description: "Status of the key (always 'revoked' after revocation)"
       },
+      scope: %Schema{
+        type: :string,
+        enum: ["relay", "subscribe"],
+        description: "Permission scope of the key (`relay` or `subscribe`)"
+      },
       revoked: %Schema{
         type: :boolean,
         description: "Confirmation that the key was revoked"
@@ -44,6 +49,7 @@ defmodule RicqchetWeb.Schemas.ApiKeyRevokedResponse do
       name: "Production Key",
       prefix: "rq_live_",
       status: "revoked",
+      scope: "relay",
       revoked: true,
       revoked_at: "2026-01-31T15:30:00Z"
     }

@@ -148,6 +148,38 @@ New tokens are returned for the current session.
 
 API keys are used for programmatic access to message relay endpoints.
 
+## API Key Scopes
+
+Every API key has a **scope** that determines which surfaces it may use:
+
+| Scope | REST relay API | Channels WebSocket | Use it for |
+| --------- | :------------: | :----------------: | ---------- |
+| `relay` (default) | ✓ | ✓ | Server-side code (publishing, channel events, reading the signing secret) |
+| `subscribe` | ✗ (403) | ✓ | **Browser** real-time clients (subscribe to channels only) |
+
+A `subscribe` key is **browser-safe**: it authenticates the channels WebSocket
+but is rejected with `403 Forbidden` on *every* REST relay endpoint (publish,
+channel events, message read/delete, forced disconnect, and the webhook
+`signing-secret`). This lets you embed it in untrusted front-end code without
+exposing the relay surface or your webhook signing secret. A `relay` key is a
+strict superset — it can do everything a `subscribe` key can, plus the full REST
+API — so keep it server-side only.
+
+> **Pick the right scope for the browser.** Never ship a `relay` key to a
+> browser. Anyone can read it from page source / the network tab and then
+> publish messages, forge webhook signatures (via the signing secret), or
+> disconnect your users. Use a `subscribe` key for browser real-time instead.
+
+Scope is **preserved across rotation** — rotating a `subscribe` key yields a new
+`subscribe` key. Scope is set at creation and cannot be changed afterward;
+create a new key (or rotate) to change it.
+
+> **Rollback note (operators):** the `scope` column is forward-only for safety.
+> Rolling the schema migration back drops the column, which makes older code
+> treat every key as full `relay` access again — any key created as `subscribe`
+> would silently regain the REST surface. Prefer fixing forward; if you must roll
+> back, revoke or rotate-to-`relay` any `subscribe` keys first.
+
 ## Architecture
 
 ```
@@ -218,6 +250,16 @@ curl -X POST "http://localhost:4000/v1/applications/{app_id}/api-keys" \
   -d '{"name": "Production Key"}'
 ```
 
+The optional `scope` field defaults to `relay`. Pass `"scope": "subscribe"` to
+mint a browser-safe key (see [API Key Scopes](#api-key-scopes)):
+
+```bash
+curl -X POST "http://localhost:4000/v1/applications/{app_id}/api-keys" \
+  -H "Authorization: Bearer <jwt_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Browser Realtime Key", "scope": "subscribe"}'
+```
+
 Response (201 Created):
 ```json
 {
@@ -226,6 +268,7 @@ Response (201 Created):
   "api_key": "rq_live_abc123def456...",
   "prefix": "rq_live_",
   "status": "active",
+  "scope": "relay",
   "expires_at": null,
   "created_at": "2026-01-31T15:30:00Z"
 }
@@ -251,6 +294,7 @@ Response (200 OK):
       "name": "Production Key",
       "prefix": "rq_live_",
       "status": "active",
+      "scope": "relay",
       "last_used_at": "2026-01-31T14:00:00Z",
       "expires_at": null,
       "created_at": "2026-01-15T10:00:00Z"
@@ -280,6 +324,7 @@ Response (200 OK):
   "name": "Production Key",
   "prefix": "rq_live_",
   "status": "revoked",
+  "scope": "relay",
   "revoked": true,
   "revoked_at": "2026-01-31T15:30:00Z"
 }
@@ -307,7 +352,8 @@ Response (200 OK):
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "name": "Production Key",
     "prefix": "rq_live_",
-    "status": "revoked"
+    "status": "revoked",
+    "scope": "relay"
   },
   "new_api_key": {
     "id": "660e8400-e29b-41d4-a716-446655440001",
@@ -315,6 +361,7 @@ Response (200 OK):
     "api_key": "rq_live_xyz789abc012...",
     "prefix": "rq_live_",
     "status": "active",
+    "scope": "relay",
     "expires_at": null,
     "created_at": "2026-01-31T15:30:00Z"
   }
@@ -370,7 +417,41 @@ channel.join("private-room") // requires auth endpoint approval
 
 The application is derived from your API key, so your channels are automatically isolated from other applications even if they use the same channel names.
 
+> **Use a `subscribe`-scoped key in the browser.** Both `relay` and `subscribe`
+> keys can open this socket, but only a `subscribe` key is safe to embed in
+> client code — it cannot touch the REST relay API. See
+> [API Key Scopes](#api-key-scopes).
+
 For private and presence channels, an additional authorization step calls your configured auth endpoint to verify the user has access.
+
+### Identity is established by your auth endpoint, not the browser
+
+The `user_id` and `user_info` socket params are **client-supplied and
+unverified** — a holder of a (public) `subscribe` key can send any values they
+like. For private and presence channels, Ricqchet treats your auth endpoint as
+the authority on identity:
+
+- If your auth endpoint's `200` response body includes a `user_id` (and
+  optionally a `user_info` object), Ricqchet **overrides** the client-supplied
+  values with those for presence tracking and client-event attribution. This
+  prevents impersonation.
+- If your auth endpoint returns no identity, the unverified client-supplied
+  `user_id`/`user_info` are used as-is.
+
+**To prevent impersonation, your auth endpoint must authenticate the session and
+return the authoritative `user_id` — never trust the client-supplied one.**
+Public channels perform no auth-endpoint call and establish no identity; treat
+anything published to a public channel (including history/cache replay) as
+world-readable to any holder of the key.
+
+Example auth endpoint response that binds identity:
+
+```json
+{ "user_id": "user-42", "user_info": { "name": "Ada", "role": "member" } }
+```
+
+Client events on private/presence channels are rate-limited **per connection**
+(not per `user_id`), so a spoofed or rotated `user_id` cannot inflate the limit.
 
 ## Key Expiration
 
