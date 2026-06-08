@@ -10,6 +10,19 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
 
       wss://api.ricqchet.com/channels?api_key=<key>&user_id=<uid>&user_info=<json>
 
+  ## Joining channels
+
+  After connecting, clients join a channel using its **bare name** as the topic —
+  there is no application prefix to construct:
+
+      socket.channel("chat-room")
+      socket.channel("private-orders")
+      socket.channel("presence-lobby")
+      socket.channel("orders.us.west")
+
+  The application is resolved from the API key on the socket, so two applications
+  can use the same channel name without colliding.
+
   ## Security
 
   API keys are passed via socket params during the WebSocket handshake.
@@ -28,7 +41,12 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
   alias Ricqchet.ApiKeys
   alias Ricqchet.Channels.ConnectionTracker
 
-  channel "channels:*", RicqchetWeb.Channels.PubsubChannel
+  # Catch-all: clients join with the bare channel name as the topic (e.g.
+  # "chat-room", "presence-lobby", "orders.us.west"). The application is derived
+  # from the authenticated socket, not the topic, so `PubsubChannel.join/3` is the
+  # sole validation gate. This must remain the last `channel` declaration — routes
+  # match in declaration order and "*" matches every topic.
+  channel "*", RicqchetWeb.Channels.PubsubChannel
 
   @impl Phoenix.Socket
   def connect(%{"api_key" => api_key} = params, socket, _connect_info) do
@@ -53,7 +71,10 @@ defmodule RicqchetWeb.Channels.ChannelSocket do
   end
 
   defp check_connection_limit(application_id) do
-    case ConnectionTracker.track_connect(application_id, get_max_connections()) do
+    # `self()` is the socket transport process (connect/3 runs in the process that
+    # becomes the long-lived socket); the tracker monitors it to release the slot
+    # on disconnect, so the count stays per-socket rather than per-channel-join.
+    case ConnectionTracker.track_connect(application_id, get_max_connections(), self()) do
       :ok -> :ok
       :limit_reached -> {:error, :connection_limit_reached}
     end

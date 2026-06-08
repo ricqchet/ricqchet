@@ -11,20 +11,37 @@ defmodule Ricqchet.Channels do
   alias Ricqchet.Channels.SubscriberTracker
   alias RicqchetWeb.Channels.Presence
 
-  @channel_name_regex ~r/\A[a-zA-Z0-9_-]{1,164}\z/
+  @channel_name_regex ~r/\A[a-zA-Z0-9_.-]{1,164}\z/
+  @alphanumeric_regex ~r/[a-zA-Z0-9]/
+
+  # Reserved by the Phoenix socket transport (heartbeats use the "phoenix" topic).
+  @reserved_channel_names ~w(phoenix)
 
   @doc """
   Validates a channel name.
 
-  Channel names must be 1–164 characters, alphanumeric plus `-` and `_`.
+  Channel names must be 1–164 characters, alphanumeric plus `-`, `_`, and `.`,
+  and must contain at least one alphanumeric character (so degenerate names like
+  `.` or `..` are rejected). The `.` enables hierarchical names (e.g.
+  `orders.us.west`). Note `:` is not permitted, so a name is always a single
+  internal-topic segment. The reserved name `phoenix` is disallowed.
   Returns `:ok` or `{:error, reason}`.
   """
   @spec validate_channel_name(String.t()) :: :ok | {:error, String.t()}
   def validate_channel_name(name) when is_binary(name) do
-    if Regex.match?(@channel_name_regex, name) do
-      :ok
-    else
-      {:error, "invalid channel name: must be 1-164 alphanumeric, dash, or underscore characters"}
+    cond do
+      not Regex.match?(@channel_name_regex, name) ->
+        {:error,
+         "invalid channel name: must be 1-164 alphanumeric, dash, underscore, or dot characters"}
+
+      name in @reserved_channel_names ->
+        {:error, "invalid channel name: #{inspect(name)} is reserved"}
+
+      not Regex.match?(@alphanumeric_regex, name) ->
+        {:error, "invalid channel name: must contain at least one alphanumeric character"}
+
+      true ->
+        :ok
     end
   end
 

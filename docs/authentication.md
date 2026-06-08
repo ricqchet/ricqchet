@@ -360,6 +360,16 @@ wss://api.ricqchet.com/channels?api_key=<key>&user_id=<uid>&user_info=<json>
 
 Connections are rejected if the API key is invalid, the application doesn't have `channels_enabled`, or the connection limit has been reached.
 
+After connecting, clients join channels by their **bare name** (no application prefix):
+
+```javascript
+channel.join("chat-room")
+channel.join("orders.us.west")
+channel.join("private-room") // requires auth endpoint approval
+```
+
+The application is derived from your API key, so your channels are automatically isolated from other applications even if they use the same channel names.
+
 For private and presence channels, an additional authorization step calls your configured auth endpoint to verify the user has access.
 
 ## Key Expiration

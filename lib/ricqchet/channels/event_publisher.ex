@@ -2,6 +2,11 @@ defmodule Ricqchet.Channels.EventPublisher do
   @moduledoc """
   Publishes events to channel subscribers via PubSub.
 
+  Events are broadcast on the internal, application-scoped topic
+  `channels:app:<application_id>:<channel_name>`, which a connected client's
+  channel process subscribes to on join. This namespacing keeps tenants isolated;
+  clients never reference this topic directly (they join with the bare channel name).
+
   When a matching namespace has `history_enabled`, events are persisted to the
   database with a monotonically increasing sequence number for reliable client
   reconnect recovery. Events are always broadcast regardless of persistence.
