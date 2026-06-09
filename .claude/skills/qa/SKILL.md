@@ -19,6 +19,8 @@ Use this skill to run an end-to-end QA test pass. The flow has up to five phases
 
 Ricqchet is an HTTP message-relay service: a JSON API (`/v1/...`), a Phoenix LiveView dashboard (`/dashboard`, `/applications`, `/team`), realtime channels, and Oban-backed delivery. QA here means **encoding scenarios as native ExUnit tests and running them under `mix test`** — not driving a real browser. Phoenix LiveView is server-rendered, so `Phoenix.LiveViewTest` exercises the full mount → event → render cycle in-process, against the transactional SQL sandbox.
 
+> **Monorepo:** the Elixir server is in `ricqchet-web/`. Every `mix` command and source path in this skill (`lib/…`, `priv/…`, `qa/…`, `docs/…`) is relative to `ricqchet-web/` — run them from there. The TypeScript client in `ricqchet-ts-client/` is out of scope for this skill.
+
 ## How the input shapes the flow
 
 Inspect what the user passed in (or didn't):

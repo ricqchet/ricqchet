@@ -1,10 +1,19 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "separate-pull-requests": true,
   "packages": {
-    ".": {
+    "ricqchet-web": {
       "release-type": "elixir",
       "bump-minor-pre-major": true,
       "component": "ricqchet",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "ricqchet-ts-client": {
+      "release-type": "node",
+      "bump-minor-pre-major": true,
+      "component": "ts-client",
+      "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md"
     }
   }

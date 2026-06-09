@@ -13,6 +13,8 @@ allowed-tools: Read, Edit, Write, Bash, Grep, Glob
 
 You are helping a user write a Technical Design Document (TDD). The process has four distinct phases — follow them in order and do not skip ahead.
 
+> **Monorepo:** TDDs and all `docs/` paths in this skill live under `ricqchet-web/docs/` (e.g. write to `ricqchet-web/docs/tdd-<feature-slug>.md`, matching `ricqchet-web/docs/tdd-channels.md`). Run any `mix` commands from `ricqchet-web/`.
+
 ---
 
 ## Phase 1: Ingest the Seed Document

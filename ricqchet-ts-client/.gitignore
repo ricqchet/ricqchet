@@ -1,0 +1,24 @@
+# Node.js artifacts
+node_modules/
+dist/
+*.tsbuildinfo
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Temporary files
+tmp/
+
+# Conductor workspace context
+.context/
+
+# Coverage
+coverage/
+
+# Environment files
+.env
+.env.local

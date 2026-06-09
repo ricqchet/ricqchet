@@ -13,14 +13,102 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Keep these in lockstep with the root mise.toml ([tools]); CI does not read mise.toml.
   MIX_ENV: test
   ELIXIR_VERSION: "1.18"
   OTP_VERSION: "27"
+  NODE_VERSION: "20"
 
 jobs:
+  # Decide which stacks need to run. On a pull_request we diff the changed
+  # paths; on every other event (push to main, merge_group, manual dispatch)
+  # there is no reliable base to diff against, so we run everything.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      # Run-gating: a stack's tests run if its dir OR the shared CI file changed.
+      web: ${{ steps.filter.outputs.web || steps.all.outputs.all }}
+      ts: ${{ steps.filter.outputs.ts || steps.all.outputs.all }}
+      # Labeling: strict, directory-only — a CI-config-only PR is neither stack.
+      web_src: ${{ steps.filter.outputs.web_src }}
+      ts_src: ${{ steps.filter.outputs.ts_src }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: all
+        if: github.event_name != 'pull_request'
+        run: echo "all=true" >> "$GITHUB_OUTPUT"
+
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            web:
+              - 'ricqchet-web/**'
+              - '.github/workflows/ci.yml'
+            ts:
+              - 'ricqchet-ts-client/**'
+              - '.github/workflows/ci.yml'
+            web_src:
+              - 'ricqchet-web/**'
+            ts_src:
+              - 'ricqchet-ts-client/**'
+
+  # Label the PR with `web` / `ts-client` to match the subproject dirs it touches.
+  # Reuses the `changes` detection above (single source of truth) via the strict
+  # web_src/ts_src outputs. PR-only and purely cosmetic: it is intentionally NOT
+  # in the `gate` job's needs, so a labeling hiccup never blocks a merge. (Note:
+  # PRs opened from forks get a read-only token on the pull_request event, so
+  # this job will no-op/fail there without affecting required checks.)
+  label:
+    name: Label PR
+    needs: changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # create the repo labels if they don't exist yet
+      pull-requests: write # add/remove labels on the PR
+    steps:
+      - name: Sync stack labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          WEB: ${{ needs.changes.outputs.web_src }}
+          TS: ${{ needs.changes.outputs.ts_src }}
+        run: |
+          # Ensure the labels exist (idempotent; --force updates color/description).
+          gh label create web --repo "$REPO" --color 1d76db \
+            --description "Touches ricqchet-web (Elixir server)" --force
+          gh label create ts-client --repo "$REPO" --color 0e8a16 \
+            --description "Touches ricqchet-ts-client (TypeScript client)" --force
+
+          # Add the label when its dir is touched, remove it otherwise, so the
+          # label always reflects the current diff across PR `synchronize` events.
+          sync() { # $1 = label, $2 = touched? (true/false)
+            if [ "$2" = "true" ]; then
+              gh pr edit "$PR" --repo "$REPO" --add-label "$1"
+            else
+              gh pr edit "$PR" --repo "$REPO" --remove-label "$1" 2>/dev/null || true
+            fi
+          }
+          sync web "$WEB"
+          sync ts-client "$TS"
+
+  # --------------------------------------------------------------------------
+  # Elixir / Phoenix (ricqchet-web)
+  # --------------------------------------------------------------------------
   credo:
     name: Credo
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ricqchet-web
     steps:
       - uses: actions/checkout@v5
 
@@ -32,9 +120,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+            ricqchet-web/deps
+            ricqchet-web/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('ricqchet-web/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
 
       - run: mix deps.get
@@ -42,7 +130,12 @@ jobs:
 
   dependencies:
     name: Dependencies
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ricqchet-web
     steps:
       - uses: actions/checkout@v5
 
@@ -54,9 +147,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+            ricqchet-web/deps
+            ricqchet-web/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('ricqchet-web/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
 
       - run: mix deps.get
@@ -64,7 +157,12 @@ jobs:
 
   dialyzer:
     name: Dialyzer
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ricqchet-web
     steps:
       - uses: actions/checkout@v5
 
@@ -77,15 +175,15 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+            ricqchet-web/deps
+            ricqchet-web/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('ricqchet-web/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
 
       - uses: actions/cache@v4
         with:
-          path: priv/plts
-          key: plt-${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-${{ hashFiles('mix.lock') }}
+          path: ricqchet-web/priv/plts
+          key: plt-${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-${{ hashFiles('ricqchet-web/mix.lock') }}
           restore-keys: plt-${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-
 
       - run: mix deps.get
@@ -94,7 +192,12 @@ jobs:
 
   format:
     name: Format
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ricqchet-web
     steps:
       - uses: actions/checkout@v5
 
@@ -106,9 +209,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+            ricqchet-web/deps
+            ricqchet-web/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('ricqchet-web/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
 
       - run: mix deps.get
@@ -116,7 +219,12 @@ jobs:
 
   test:
     name: Test
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ricqchet-web
     services:
       postgres:
         image: postgres:15
@@ -142,11 +250,72 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            deps
-            _build
-          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+            ricqchet-web/deps
+            ricqchet-web/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('ricqchet-web/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
 
       - run: mix deps.get
       - run: mix compile --warnings-as-errors
       - run: mix test
+
+  # --------------------------------------------------------------------------
+  # TypeScript client (ricqchet-ts-client)
+  # --------------------------------------------------------------------------
+  ts-client:
+    name: TS Client
+    needs: changes
+    if: needs.changes.outputs.ts == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ricqchet-ts-client
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: ricqchet-ts-client/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run lint
+      - run: npm run format:check
+
+  # --------------------------------------------------------------------------
+  # Aggregate gate — the single required status check.
+  #
+  # Path-filtered jobs are *skipped* (not failed) when their stack is
+  # untouched. A required check tied directly to a skippable job would block
+  # PRs that never run it. This job always runs and fails only if a job it
+  # depends on actually failed or was cancelled — skipped is fine.
+  # --------------------------------------------------------------------------
+  gate:
+    name: All checks passed
+    if: always()
+    needs:
+      - changes
+      - credo
+      - dependencies
+      - dialyzer
+      - format
+      - test
+      - ts-client
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify no required job failed
+        run: |
+          results='${{ join(needs.*.result, ' ') }}'
+          echo "Upstream job results: $results"
+          for r in $results; do
+            case "$r" in
+              failure|cancelled)
+                echo "::error::A required job reported '$r'."
+                exit 1
+                ;;
+            esac
+          done
+          echo "All required jobs passed or were skipped."

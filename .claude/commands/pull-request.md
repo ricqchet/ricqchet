@@ -1,5 +1,7 @@
 Open a pull request for the current branch against `main`.
 
+> **Monorepo:** the Elixir server lives in `ricqchet-web/`, the TypeScript client in `ricqchet-ts-client/`. Run every `mix` command and resolve relative source paths (`docs/`, `priv/repo/migrations/`, …) from inside `ricqchet-web/`. For TypeScript-client changes, run the `npm` checks (`build`, `test`, `lint`, `format:check`) from `ricqchet-ts-client/` instead of `mix precommit`.
+
 ## Arguments
 
 - `$ARGUMENTS` — Pass `draft` to create a draft PR (e.g., `/pull-request draft`). If omitted, creates a regular PR.

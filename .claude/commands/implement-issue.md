@@ -1,5 +1,7 @@
 Implement the changes described in one or more GitHub issues passed via $ARGUMENTS.
 
+> **Monorepo:** the Elixir server lives in `ricqchet-web/`, the TypeScript client in `ricqchet-ts-client/`. Run every `mix` command and resolve relative source paths (`lib/`, `priv/`, `test/`, `docs/`, …) from inside `ricqchet-web/`. For TypeScript-client changes, run the `npm` checks from `ricqchet-ts-client/` instead of `mix precommit`.
+
 ## Arguments
 
 `$ARGUMENTS` accepts one or more GitHub issue numbers, optionally followed by free-form additional context:
