@@ -13,10 +13,16 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
 
+    # Manifest mode emits per-package outputs keyed by package path
+    # (e.g. `ricqchet-web--tag_name`). The legacy single-package outputs
+    # (`release_created`, `tag_name`, `version`) are not populated here.
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      paths_released: ${{ steps.release.outputs.paths_released }}
+      web_release_created: ${{ steps.release.outputs['ricqchet-web--release_created'] }}
+      web_tag_name: ${{ steps.release.outputs['ricqchet-web--tag_name'] }}
+      ts_client_release_created: ${{ steps.release.outputs['ricqchet-ts-client--release_created'] }}
+      ts_client_tag_name: ${{ steps.release.outputs['ricqchet-ts-client--tag_name'] }}
 
     steps:
       - name: Release Please

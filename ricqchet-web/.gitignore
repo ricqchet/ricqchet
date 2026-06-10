@@ -1,0 +1,18 @@
+# Elixir/Mix artifacts
+_build/
+deps/
+cover/
+doc/
+.fetch
+erl_crash.dump
+*.ez
+*.tar
+
+# Dialyzer PLT files
+priv/plts/
+
+# Generated asset bundles (built by esbuild/tailwind)
+/priv/static/assets/
+
+# Node/npm (if assets require npm packages)
+/assets/node_modules/

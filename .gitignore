@@ -1,15 +1,7 @@
-# Elixir/Mix artifacts
-_build/
-deps/
-cover/
-doc/
-.fetch
-erl_crash.dump
-*.ez
-*.tar
-
-# Dialyzer PLT files
-priv/plts/
+# Monorepo root .gitignore — shared OS / editor / workspace noise only.
+# Per-project build artifacts live in each subproject's own .gitignore:
+#   ricqchet-web/.gitignore        (Elixir / Phoenix)
+#   ricqchet-ts-client/.gitignore  (Node / TypeScript)
 
 # IDE and editor files
 .idea/
@@ -18,14 +10,13 @@ priv/plts/
 *.swo
 .DS_Store
 
-# Generated asset bundles (built by esbuild/tailwind)
-/priv/static/assets/
-
-# Node/npm (if assets require npm packages)
-/assets/node_modules/
-
 # Temporary files
 tmp/
+
+# Stray BEAM crash dumps. Project artifacts live in each subproject's
+# .gitignore, but a dump lands at the repo root if BEAM is run from here.
+erl_crash.dump
+*.dump
 
 # Conductor workspace context
 .context/

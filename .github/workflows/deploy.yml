@@ -1,8 +1,14 @@
 name: Deploy
 
 on:
+  # Auto-deploy fires on a published `ricqchet-v*` release. IMPORTANT: for that
+  # event to actually trigger this workflow, release-please must publish the
+  # release with a PAT (e.g. secrets.RELEASE_PLEASE_TOKEN), NOT the default
+  # GITHUB_TOKEN — GitHub suppresses workflow triggers from GITHUB_TOKEN-created
+  # releases. `workflow_dispatch` is the manual fallback.
   release:
     types: [published]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -11,19 +17,23 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to Fly.io
-    if: startsWith(github.event.release.tag_name, 'ricqchet-v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'ricqchet-v')
     runs-on: ubuntu-latest
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    defaults:
+      run:
+        working-directory: ricqchet-web
     steps:
       - uses: actions/checkout@v5
 
       - name: Verify Fly.io configuration
         run: |
           if [ ! -f "fly.toml" ]; then
-            echo "Error: fly.toml not found."
-            echo "Please run 'flyctl launch' locally to initialize your Fly.io app,"
-            echo "then commit the generated fly.toml (and Dockerfile if required) before deploying."
+            echo "Error: ricqchet-web/fly.toml not found."
+            echo "Please run 'flyctl launch' from the ricqchet-web/ directory to initialize"
+            echo "your Fly.io app, then commit the generated fly.toml (and Dockerfile if"
+            echo "required) before deploying."
             exit 1
           fi
 

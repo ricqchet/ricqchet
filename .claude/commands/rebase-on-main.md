@@ -1,5 +1,7 @@
 Rebase the current branch on `origin/main` and resolve any conflicts.
 
+> **Monorepo:** the Elixir server lives in `ricqchet-web/`, the TypeScript client in `ricqchet-ts-client/`. Run every `mix` command and resolve relative source paths from inside `ricqchet-web/`. For TypeScript-client changes, run the `npm` checks (`build`, `test`, `lint`, `format:check`) from `ricqchet-ts-client/` instead of `mix precommit`.
+
 ## Steps
 
 1. **Check for uncommitted changes** — Ensure the working tree is clean:
