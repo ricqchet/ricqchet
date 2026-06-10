@@ -1,3 +1,9 @@
+---
+name: rebase-on-main
+description: Rebase the current branch on origin/main and resolve conflicts.
+disable-model-invocation: true
+---
+
 Rebase the current branch on `origin/main` and resolve any conflicts.
 
 > **Monorepo:** the Elixir server lives in `ricqchet-web/`, the TypeScript client in `ricqchet-ts-client/`. Run every `mix` command and resolve relative source paths from inside `ricqchet-web/`. For TypeScript-client changes, run the `npm` checks (`build`, `test`, `lint`, `format:check`) from `ricqchet-ts-client/` instead of `mix precommit`.
