@@ -1,0 +1,76 @@
+name: Docker
+
+on:
+  # Auto-build fires on a published `ricqchet-v*` release. IMPORTANT: for that
+  # event to actually trigger this workflow, release-please must publish the
+  # release with a PAT (e.g. secrets.RELEASE_PLEASE_TOKEN), NOT the default
+  # GITHUB_TOKEN — GitHub suppresses workflow triggers from GITHUB_TOKEN-created
+  # releases. `workflow_dispatch` is the manual fallback.
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to build (e.g. 1.2.3)"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    name: Build and push Docker image
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.release.tag_name, 'ricqchet-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.tag }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#ricqchet-v}"
+          fi
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+            echo "::error::Invalid semver version: ${VERSION}"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/ricqchet
+          tags: |
+            type=semver,pattern=v{{major}},value=${{ steps.version.outputs.version }},enable=${{ github.event_name != 'release' || !github.event.release.prerelease }}
+            type=semver,pattern=v{{major}}.{{minor}},value=${{ steps.version.outputs.version }},enable=${{ github.event_name != 'release' || !github.event.release.prerelease }}
+            type=semver,pattern=v{{major}}.{{minor}}.{{patch}},value=${{ steps.version.outputs.version }}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.event_name != 'release' || !github.event.release.prerelease }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ricqchet-web
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

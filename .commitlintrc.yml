@@ -17,9 +17,7 @@ rules:
       - chore
       - revert
   subject-case:
-    - 2
-    - always
-    - lower-case
+    - 0
   header-max-length:
     - 2
     - always
