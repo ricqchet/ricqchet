@@ -1,3 +1,10 @@
+---
+name: commit-changes
+description: Review all uncommitted changes and create a well-structured conventional commit.
+argument-hint: "[optional context]"
+disable-model-invocation: true
+---
+
 Review all uncommitted changes and create a well-structured commit using conventional commit format.
 
 > **Monorepo:** two projects share this repo — the Elixir server in `ricqchet-web/` and the TypeScript client in `ricqchet-ts-client/`. Run the pre-flight gate inside whichever you changed: `mix precommit` from `ricqchet-web/`, or `npm run build && npm test && npm run lint && npm run format:check` from `ricqchet-ts-client/`. Resolve relative paths from that subdirectory, and prefer a project scope for single-side commits — `feat(web): …`, `fix(ts-client): …`.
