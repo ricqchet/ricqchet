@@ -154,6 +154,7 @@ describe("verifyRequest", () => {
     const headers = {
       "x-ricqchet-signature": signature,
       "x-ricqchet-batch-id": "batch-456",
+      "x-ricqchet-batch-size": "25",
       "x-ricqchet-attempt": "1",
     };
 
@@ -162,6 +163,7 @@ describe("verifyRequest", () => {
     expect(result.valid).toBe(true);
     if (result.valid) {
       expect(result.metadata.batchId).toBe("batch-456");
+      expect(result.metadata.batchSize).toBe(25);
       expect(result.metadata.messageId).toBe(null);
     }
   });

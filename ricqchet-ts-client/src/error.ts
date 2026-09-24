@@ -20,18 +20,29 @@ export class RicqchetError extends Error {
   readonly type: RicqchetErrorType;
   readonly status: number | null;
   readonly details: Record<string, unknown> | null;
+  /**
+   * The server's machine-readable error code (the response body's `error`
+   * field), e.g. `"duplicate_message"`, `"already_dispatched"`, or
+   * `"rate_limit_exceeded"`. `null` for client-side and connection errors.
+   */
+  readonly code: string | null;
+  /** Seconds to wait before retrying, from the `Retry-After` header on `429`s. */
+  readonly retryAfter: number | null;
 
   constructor(
     type: RicqchetErrorType,
     message: string,
     status: number | null = null,
-    details: Record<string, unknown> | null = null
+    details: Record<string, unknown> | null = null,
+    retryAfter: number | null = null
   ) {
     super(message);
     this.name = "RicqchetError";
     this.type = type;
     this.status = status;
     this.details = details;
+    this.code = typeof details?.error === "string" ? details.error : null;
+    this.retryAfter = retryAfter;
   }
 
   /**
@@ -39,11 +50,12 @@ export class RicqchetError extends Error {
    */
   static fromResponse(
     status: number,
-    body: Record<string, unknown> | null
+    body: Record<string, unknown> | null,
+    retryAfter: number | null = null
   ): RicqchetError {
     const type = this.typeFromStatus(status);
     const message = this.extractMessage(body);
-    return new RicqchetError(type, message, status, body);
+    return new RicqchetError(type, message, status, body, retryAfter);
   }
 
   /**

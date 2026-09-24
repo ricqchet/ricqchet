@@ -72,10 +72,10 @@ const { messageId } = await client.publish(
   "https://api.example.com/webhook",
   { event: "reminder" },
   {
-    delay: "5m",              // Delay delivery
+    delay: "5m",              // Delay delivery ("30s", "2h", "1d", or seconds as a number; max 7 days)
     dedupKey: "reminder-123", // Deduplication
     dedupTtl: 3600,           // Dedup TTL in seconds
-    retries: 5,               // Max retry attempts
+    retries: 5,               // Max retry attempts (0 = never retry)
     forwardHeaders: {         // Headers to forward
       "x-custom-header": "value"
     }
@@ -113,6 +113,29 @@ const { messageId } = await client.publish(
   }
 );
 ```
+
+### Broadcast Deliveries to a Channel
+
+Set `broadcastChannel` to push a `relay:message` event to a real-time channel
+once the message is successfully delivered (not supported for batched messages):
+
+```typescript
+import { RELAY_MESSAGE_EVENT, type RelayMessageEventData } from "@ricqchet/client";
+
+await client.publish(
+  "https://api.example.com/webhook",
+  { event: "order.created" },
+  { broadcastChannel: "orders" }
+);
+
+// In the browser (see Real-Time Channels below):
+channel.bind(RELAY_MESSAGE_EVENT, (data) => {
+  const { message_id, destination_url, payload } = data as RelayMessageEventData;
+});
+```
+
+This sends the `Ricqchet-Forward-Ricqchet-Channel` header, so the destination
+also receives a `Ricqchet-Channel` header.
 
 ## Message Management
 
@@ -236,6 +259,20 @@ room.bindPresence({
 
 rt.unsubscribe("private-order-123");
 rt.disconnect();
+```
+
+The server also pushes system events, exported as `SystemEvents`:
+
+```typescript
+import { SystemEvents } from "@ricqchet/client/realtime";
+
+// Most recent event, pushed on join when the namespace has caching enabled.
+channel.bind(SystemEvents.CACHED_EVENT, (data, meta) => {
+  lastEventId = meta.eventId;
+});
+
+// `lastEventId` recovery failed (event pruned from history) — refetch state.
+channel.bind(SystemEvents.RECOVERY_FAILED, () => refetchAll());
 ```
 
 ### React hooks — `@ricqchet/client/react`
@@ -373,6 +410,9 @@ if (result.valid) {
 }
 ```
 
+`verifyRequest` also returns delivery metadata: `messageId`, `attempt`, and for
+batched deliveries `batchId` and `batchSize`.
+
 ## Error Handling
 
 ```typescript
@@ -390,7 +430,12 @@ try {
         console.log("Check your API key");
         break;
       case "rate_limited":
-        console.log("Slow down!");
+        console.log(`Retry in ${error.retryAfter ?? 1}s`);
+        break;
+      case "conflict":
+        // `code` is the server's machine-readable error, e.g.
+        // "duplicate_message" or "already_dispatched".
+        console.log("Conflict:", error.code);
         break;
       default:
         console.log("Error:", error.message);
@@ -413,7 +458,7 @@ try {
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `delay` | string | Delay delivery (e.g., "30s", "5m", "1h") |
+| `delay` | string \| number | Delay delivery (e.g., "30s", "5m", "1h", or seconds) |
 | `dedupKey` | string | Deduplication key |
 | `dedupTtl` | number | Deduplication TTL in seconds |
 | `retries` | number | Max retry attempts |
@@ -422,6 +467,7 @@ try {
 | `batchTimeout` | number | Batch timeout in seconds |
 | `forwardHeaders` | Record<string, string> | Headers to forward |
 | `contentType` | string | Content-Type header |
+| `broadcastChannel` | string | Broadcast a `relay:message` event to this channel after delivery |
 
 ## License
 

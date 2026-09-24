@@ -17,7 +17,7 @@ interface TriggerSingleChannel extends TriggerEventBase {
 
 interface TriggerMultipleChannels extends TriggerEventBase {
   channel?: never;
-  /** Multiple channel names (max 100) */
+  /** Multiple channel names (max 10) */
   channels: string[];
 }
 
@@ -71,10 +71,30 @@ export interface ChannelEvent {
 export interface PresenceMember {
   userId: string;
   userInfo: Record<string, unknown> | null;
-  joinedAt: string;
+  /** Unix seconds the member joined, when provided by the server. */
+  joinedAt: number | null;
 }
 
 export interface DisconnectResult {
   status: string;
   userId: string;
+}
+
+// ─── Relay → Channel Broadcast ───────────────────────────────────────────────
+
+/**
+ * Event name broadcast to a channel when a message published with
+ * `broadcastChannel` is successfully delivered.
+ */
+export const RELAY_MESSAGE_EVENT = "relay:message";
+
+/**
+ * The `data` payload of a {@link RELAY_MESSAGE_EVENT} channel event (wire
+ * format, as received by `RicqchetChannel.bind`).
+ */
+export interface RelayMessageEventData {
+  message_id: string;
+  destination_url: string;
+  /** The raw message body that was delivered. */
+  payload: string | null;
 }

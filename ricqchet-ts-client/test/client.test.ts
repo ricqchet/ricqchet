@@ -77,6 +77,112 @@ describe("RicqchetClient", () => {
       );
     });
 
+    it("sends explicit zero values for numeric options", async () => {
+      server.use(
+        http.post(`${baseUrl}/v1/publish`, async ({ request }) => {
+          expect(request.headers.get("ricqchet-retries")).toBe("0");
+          expect(request.headers.get("ricqchet-dedup-ttl")).toBe("0");
+          expect(request.headers.get("ricqchet-delay")).toBe("0");
+
+          return HttpResponse.json({ message_id: "test-id" });
+        })
+      );
+
+      const client = new RicqchetClient({ baseUrl, apiKey });
+      await client.publish(
+        "https://example.com",
+        { event: "test" },
+        { retries: 0, dedupTtl: 0, delay: 0 }
+      );
+    });
+
+    it("accepts a numeric delay in seconds", async () => {
+      server.use(
+        http.post(`${baseUrl}/v1/publish`, async ({ request }) => {
+          expect(request.headers.get("ricqchet-delay")).toBe("90");
+          return HttpResponse.json({ message_id: "test-id" });
+        })
+      );
+
+      const client = new RicqchetClient({ baseUrl, apiKey });
+      await client.publish("https://example.com", {}, { delay: 90 });
+    });
+
+    it("sends the broadcast channel as a forwarded Ricqchet-Channel header", async () => {
+      server.use(
+        http.post(`${baseUrl}/v1/publish`, async ({ request }) => {
+          expect(request.headers.get("ricqchet-forward-ricqchet-channel")).toBe(
+            "orders.us.west"
+          );
+          return HttpResponse.json({ message_id: "test-id" });
+        })
+      );
+
+      const client = new RicqchetClient({ baseUrl, apiKey });
+      await client.publish(
+        "https://example.com",
+        {},
+        { broadcastChannel: "orders.us.west" }
+      );
+    });
+
+    it("rejects an invalid broadcast channel without making a request", async () => {
+      const client = new RicqchetClient({ baseUrl, apiKey });
+
+      await expect(
+        client.publish(
+          "https://example.com",
+          {},
+          { broadcastChannel: "bad:name" }
+        )
+      ).rejects.toMatchObject({ type: "validation_error" });
+    });
+
+    it("exposes the server error code on duplicate messages", async () => {
+      server.use(
+        http.post(`${baseUrl}/v1/publish`, () =>
+          HttpResponse.json(
+            {
+              error: "duplicate_message",
+              message: "A message with this dedup_key already exists: abc",
+            },
+            { status: 409 }
+          )
+        )
+      );
+
+      const client = new RicqchetClient({ baseUrl, apiKey });
+
+      await expect(
+        client.publish("https://example.com", {}, { dedupKey: "k" })
+      ).rejects.toMatchObject({
+        type: "conflict",
+        code: "duplicate_message",
+        status: 409,
+      });
+    });
+
+    it("exposes Retry-After on rate-limited responses", async () => {
+      server.use(
+        http.post(`${baseUrl}/v1/publish`, () =>
+          HttpResponse.json(
+            { error: "rate_limit_exceeded", message: "Too many requests" },
+            { status: 429, headers: { "retry-after": "1" } }
+          )
+        )
+      );
+
+      const client = new RicqchetClient({ baseUrl, apiKey });
+
+      await expect(
+        client.publish("https://example.com", {})
+      ).rejects.toMatchObject({
+        type: "rate_limited",
+        code: "rate_limit_exceeded",
+        retryAfter: 1,
+      });
+    });
+
     it("includes forward headers when provided", async () => {
       server.use(
         http.post(`${baseUrl}/v1/publish`, async ({ request }) => {

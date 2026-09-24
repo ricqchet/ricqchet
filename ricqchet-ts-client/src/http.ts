@@ -64,15 +64,25 @@ export class HttpClient {
   }
 
   async parseError(response: Response): Promise<RicqchetError> {
+    const retryAfter = parseRetryAfter(response.headers.get("retry-after"));
+
     try {
       const data = await response.json();
-      return RicqchetError.fromResponse(response.status, data);
+      return RicqchetError.fromResponse(response.status, data, retryAfter);
     } catch {
       return new RicqchetError(
         "unknown_error",
         `Request failed with status ${response.status}`,
-        response.status
+        response.status,
+        null,
+        retryAfter
       );
     }
   }
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (value == null) return null;
+  const seconds = Number.parseInt(value, 10);
+  return Number.isNaN(seconds) ? null : seconds;
 }

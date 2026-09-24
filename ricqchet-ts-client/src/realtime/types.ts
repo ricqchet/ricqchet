@@ -68,6 +68,23 @@ export type ChannelEventHandler = (
   meta: ChannelEventMeta
 ) => void;
 
+/**
+ * Server-generated system events pushed on a channel. Bind them like any other
+ * event and read {@link ChannelEventMeta.raw} for the full payload.
+ */
+export const SystemEvents = {
+  /**
+   * The channel's most recent event, pushed on join when the channel's
+   * namespace has caching enabled. Payload: `{ id, event, channel, data, sequence }`.
+   */
+  CACHED_EVENT: "ricqchet:cached_event",
+  /**
+   * Pushed when `lastEventId` recovery fails because the event was pruned from
+   * history. Payload: `{ reason, last_event_id, channel }` — refetch state instead.
+   */
+  RECOVERY_FAILED: "ricqchet:recovery_failed",
+} as const;
+
 /** Unbinds a previously bound handler. */
 export type Unbind = () => void;
 

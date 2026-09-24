@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 const SIGNATURE_HEADER = "x-ricqchet-signature";
 const MESSAGE_ID_HEADER = "x-ricqchet-message-id";
 const BATCH_ID_HEADER = "x-ricqchet-batch-id";
+const BATCH_SIZE_HEADER = "x-ricqchet-batch-size";
 const ATTEMPT_HEADER = "x-ricqchet-attempt";
 
 /**
@@ -13,6 +14,8 @@ export interface VerificationMetadata {
   messageId: string | null;
   /** The batch ID (for batch deliveries) */
   batchId: string | null;
+  /** Number of messages in the batch (for batch deliveries) */
+  batchSize: number | null;
   /** The delivery attempt number (1-based) */
   attempt: number | null;
   /** The signature timestamp */
@@ -118,6 +121,7 @@ export function verifySignature(
     metadata: {
       messageId: null,
       batchId: null,
+      batchSize: null,
       attempt: null,
       timestamp,
     },
@@ -168,7 +172,8 @@ export function verifyRequest(
     metadata: {
       messageId: getHeader(headers, MESSAGE_ID_HEADER) ?? null,
       batchId: getHeader(headers, BATCH_ID_HEADER) ?? null,
-      attempt: parseAttempt(getHeader(headers, ATTEMPT_HEADER)),
+      batchSize: parseIntHeader(getHeader(headers, BATCH_SIZE_HEADER)),
+      attempt: parseIntHeader(getHeader(headers, ATTEMPT_HEADER)),
       timestamp: result.metadata.timestamp,
     },
   };
@@ -204,7 +209,7 @@ function getHeader(
   return undefined;
 }
 
-function parseAttempt(value: string | undefined): number | null {
+function parseIntHeader(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = parseInt(value, 10);
   return isNaN(parsed) ? null : parsed;
