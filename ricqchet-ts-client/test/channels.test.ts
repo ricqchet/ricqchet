@@ -193,7 +193,7 @@ describe("RicqchetClient — Channels", () => {
               {
                 user_id: "user-1",
                 user_info: { name: "Alice" },
-                joined_at: "2024-01-01T00:00:00Z",
+                joined_at: 1704067200,
               },
             ],
           })
@@ -207,6 +207,7 @@ describe("RicqchetClient — Channels", () => {
       expect(info.members).toHaveLength(1);
       expect(info.members![0].userId).toBe("user-1");
       expect(info.members![0].userInfo).toEqual({ name: "Alice" });
+      expect(info.members![0].joinedAt).toBe(1704067200);
     });
 
     it("returns null members for non-presence channel", async () => {
@@ -280,7 +281,7 @@ describe("RicqchetClient — Channels", () => {
               {
                 user_id: "u1",
                 user_info: null,
-                joined_at: "2024-01-01T00:00:00Z",
+                joined_at: 1704067200,
               },
             ],
           })
@@ -309,6 +310,45 @@ describe("RicqchetClient — Channels", () => {
 
       expect(result.status).toBe("ok");
       expect(result.userId).toBe("user-123");
+    });
+  });
+
+  describe("client-side limits", () => {
+    it("rejects more than 10 channels without making a request", async () => {
+      const client = new RicqchetClient({ baseUrl, apiKey });
+      const channels = Array.from({ length: 11 }, (_, i) => `room-${i}`);
+
+      await expect(
+        client.triggerEvent({ channels, event: "e" })
+      ).rejects.toMatchObject({ type: "validation_error" });
+    });
+
+    it("rejects an empty channels list without making a request", async () => {
+      const client = new RicqchetClient({ baseUrl, apiKey });
+
+      await expect(
+        client.triggerEvent({ channels: [], event: "e" })
+      ).rejects.toMatchObject({ type: "validation_error" });
+    });
+
+    it("rejects more than 10 batch events without making a request", async () => {
+      const client = new RicqchetClient({ baseUrl, apiKey });
+      const batch = Array.from({ length: 11 }, (_, i) => ({
+        channel: `room-${i}`,
+        event: "e",
+      }));
+
+      await expect(client.triggerBatchEvents({ batch })).rejects.toMatchObject({
+        type: "validation_error",
+      });
+    });
+
+    it("rejects an empty batch without making a request", async () => {
+      const client = new RicqchetClient({ baseUrl, apiKey });
+
+      await expect(
+        client.triggerBatchEvents({ batch: [] })
+      ).rejects.toMatchObject({ type: "validation_error" });
     });
   });
 });

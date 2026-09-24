@@ -1,5 +1,6 @@
 import { RicqchetError } from "./error";
 import { HttpClient } from "./http";
+import { validateChannelName } from "./channels";
 import type {
   TriggerEventParams,
   TriggerEventResult,
@@ -19,6 +20,18 @@ import type {
 const MAX_FAN_OUT_DESTINATIONS = 100;
 
 /**
+ * Maximum number of channels in a single {@link RicqchetClient.triggerEvent}
+ * call. Mirrors the server-side limit so the client can fail fast.
+ */
+const MAX_TRIGGER_CHANNELS = 10;
+
+/**
+ * Maximum number of events in a single {@link RicqchetClient.triggerBatchEvents}
+ * call. Mirrors the server-side limit so the client can fail fast.
+ */
+const MAX_BATCH_EVENTS = 10;
+
+/**
  * Configuration options for the Ricqchet client.
  */
 export interface RicqchetClientOptions {
@@ -34,8 +47,11 @@ export interface RicqchetClientOptions {
  * Options for publishing a message.
  */
 export interface PublishOptions {
-  /** Delay delivery (e.g., "30s", "5m", "1h") */
-  delay?: string;
+  /**
+   * Delay delivery. Either a duration string (`"30s"`, `"5m"`, `"2h"`, `"1d"`)
+   * or a number of seconds. The server caps delays at 7 days.
+   */
+  delay?: string | number;
   /** Deduplication key */
   dedupKey?: string;
   /** Deduplication TTL in seconds (default: 300) */
@@ -52,6 +68,14 @@ export interface PublishOptions {
   forwardHeaders?: Record<string, string>;
   /** Content-Type header (default: "application/json") */
   contentType?: string;
+  /**
+   * Broadcast a `relay:message` event to this channel after the message is
+   * successfully delivered (see {@link RELAY_MESSAGE_EVENT}). Sent as the
+   * `Ricqchet-Forward-Ricqchet-Channel` header, so the destination also
+   * receives it as `Ricqchet-Channel`. Applies to individual and fan-out
+   * messages, not batched ones.
+   */
+  broadcastChannel?: string;
 }
 
 /**
@@ -260,7 +284,7 @@ export class RicqchetClient {
   async getMessage(messageId: string): Promise<Message> {
     const response = await this.request(
       "GET",
-      `/v1/messages/${messageId}`,
+      `/v1/messages/${encodeURIComponent(messageId)}`,
       {},
       null
     );
@@ -292,7 +316,7 @@ export class RicqchetClient {
   async cancelMessage(messageId: string): Promise<{ cancelled: boolean }> {
     const response = await this.request(
       "DELETE",
-      `/v1/messages/${messageId}`,
+      `/v1/messages/${encodeURIComponent(messageId)}`,
       {},
       null
     );
@@ -347,6 +371,21 @@ export class RicqchetClient {
    * @returns Event IDs and channel information
    */
   async triggerEvent(params: TriggerEventParams): Promise<TriggerEventResult> {
+    if (params.channels != null) {
+      if (params.channels.length === 0) {
+        throw new RicqchetError(
+          "validation_error",
+          "triggerEvent requires at least one channel"
+        );
+      }
+      if (params.channels.length > MAX_TRIGGER_CHANNELS) {
+        throw new RicqchetError(
+          "validation_error",
+          `triggerEvent supports at most ${MAX_TRIGGER_CHANNELS} channels (received ${params.channels.length})`
+        );
+      }
+    }
+
     const body: Record<string, unknown> = { event: params.event };
     if (params.channel != null) body.channel = params.channel;
     if (params.channels != null) body.channels = params.channels;
@@ -374,12 +413,28 @@ export class RicqchetClient {
   /**
    * Triggers multiple events in a single batch request.
    *
-   * @param params - Batch of events (up to 100)
+   * Each event is published independently, so partial success is possible —
+   * check each result's `status`.
+   *
+   * @param params - Batch of events (up to 10)
    * @returns Results for each event in the batch
    */
   async triggerBatchEvents(
     params: BatchTriggerParams
   ): Promise<BatchTriggerResult> {
+    if (params.batch.length === 0) {
+      throw new RicqchetError(
+        "validation_error",
+        "triggerBatchEvents requires at least one event"
+      );
+    }
+    if (params.batch.length > MAX_BATCH_EVENTS) {
+      throw new RicqchetError(
+        "validation_error",
+        `triggerBatchEvents supports at most ${MAX_BATCH_EVENTS} events (received ${params.batch.length})`
+      );
+    }
+
     const body = {
       batch: params.batch.map((item) => {
         const mapped: Record<string, unknown> = {
@@ -574,16 +629,19 @@ export class RicqchetClient {
   private buildCommonHeaders(options?: PublishOptions): Record<string, string> {
     const headers: Record<string, string> = {};
 
-    if (options?.delay) headers["ricqchet-delay"] = options.delay;
+    // Numeric options use `!= null` rather than truthiness so an explicit `0`
+    // (e.g. `retries: 0` — never retry) is sent instead of silently dropped.
+    if (options?.delay != null && options.delay !== "")
+      headers["ricqchet-delay"] = options.delay.toString();
     if (options?.dedupKey) headers["ricqchet-dedup-key"] = options.dedupKey;
-    if (options?.dedupTtl)
+    if (options?.dedupTtl != null)
       headers["ricqchet-dedup-ttl"] = options.dedupTtl.toString();
-    if (options?.retries)
+    if (options?.retries != null)
       headers["ricqchet-retries"] = options.retries.toString();
     if (options?.batchKey) headers["ricqchet-batch-key"] = options.batchKey;
-    if (options?.batchSize)
+    if (options?.batchSize != null)
       headers["ricqchet-batch-size"] = options.batchSize.toString();
-    if (options?.batchTimeout)
+    if (options?.batchTimeout != null)
       headers["ricqchet-batch-timeout"] = options.batchTimeout.toString();
     if (options?.contentType) headers["content-type"] = options.contentType;
 
@@ -591,6 +649,14 @@ export class RicqchetClient {
       for (const [key, value] of Object.entries(options.forwardHeaders)) {
         headers[`ricqchet-forward-${key}`] = value;
       }
+    }
+
+    if (options?.broadcastChannel != null) {
+      const validation = validateChannelName(options.broadcastChannel);
+      if (!validation.valid) {
+        throw new RicqchetError("validation_error", validation.reason);
+      }
+      headers["ricqchet-forward-ricqchet-channel"] = options.broadcastChannel;
     }
 
     return headers;
@@ -617,7 +683,7 @@ export class RicqchetClient {
     return {
       userId: m.user_id as string,
       userInfo: (m.user_info as Record<string, unknown>) ?? null,
-      joinedAt: m.joined_at as string,
+      joinedAt: typeof m.joined_at === "number" ? m.joined_at : null,
     };
   }
 }
